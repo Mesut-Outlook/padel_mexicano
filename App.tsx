@@ -53,6 +53,31 @@ export default function App() {
     return a;
   }
 
+  function calculateOptimalRounds(playerCount: number) {
+    if (playerCount < 8 || playerCount % 2 !== 0) {
+      return { optimalRounds: 0, matchesPerPlayer: 0, description: "Geçersiz oyuncu sayısı" };
+    }
+
+    const playingPerRound = Math.floor(playerCount / 4) * 4;
+    const byesPerRound = playerCount - playingPerRound;
+    
+    let optimalRounds;
+    if (byesPerRound === 0) {
+      optimalRounds = Math.max(6, Math.floor(playerCount * 0.75));
+    } else {
+      optimalRounds = Math.ceil(playerCount * 0.6);
+    }
+    
+    const matchesPerPlayer = Math.floor((optimalRounds * 4) / playerCount);
+    
+    let description = `${playerCount} oyuncu için optimal: ${optimalRounds} tur`;
+    if (byesPerRound > 0) {
+      description += ` (her turda ${byesPerRound} bay)`;
+    }
+    
+    return { optimalRounds, matchesPerPlayer, description };
+  }
+
   function ensureEvenAtLeastEight(): boolean {
     if (players.length < 8) {
       alert("Oyuncu sayısı en az 8 olmalı.");
@@ -375,6 +400,54 @@ export default function App() {
             </button>
             <div className="text-sm text-gray-600">Oyuncu sayısı: {players.length} (bu tur için gerekli bay: {byesNeededNow})</div>
           </div>
+
+          {/* Tur Hesaplama Bilgi Paneli */}
+          {(() => {
+            const calc = calculateOptimalRounds(players.length);
+            const currentRounds = rounds.length;
+            const progress = Math.min(100, (currentRounds / calc.optimalRounds) * 100);
+            const remaining = Math.max(0, calc.optimalRounds - currentRounds);
+            
+            return (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4">
+                <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                  🏆 Turnuva Planlama
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <div className="font-medium text-blue-700">Eşit Dağılım İçin</div>
+                    <div className="text-lg font-bold text-blue-900">
+                      {calc.optimalRounds} Tur
+                    </div>
+                    <div className="text-blue-600">
+                      Oyuncu başına ~{calc.matchesPerPlayer} maç
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-blue-700">Mevcut Durum</div>
+                    <div className="text-lg font-bold text-blue-900">
+                      {currentRounds}/{calc.optimalRounds} Tur
+                    </div>
+                    <div className="text-blue-600">
+                      {remaining > 0 ? `${remaining} tur daha önerilen` : "Hedef tamamlandı!"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-blue-700">İlerleme</div>
+                    <div className="w-full bg-blue-200 rounded-full h-3 mt-2">
+                      <div 
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-blue-800 font-medium mt-1">
+                      %{Math.round(progress)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex items-center gap-3 mt-4">
             <button
