@@ -195,7 +195,12 @@ export default function App() {
     setRounds((prev) => {
       const copy = [...prev];
       const r = { ...copy[roundIndex] };
-      const m = { ...r.matches[matchIndex], ...data };
+      let m = { ...r.matches[matchIndex], ...data };
+      
+      // 32'den fazla skor girilmesini engelle
+      if (m.scoreA != null && m.scoreA > 32) m.scoreA = 32;
+      if (m.scoreB != null && m.scoreB > 32) m.scoreB = 32;
+      
       // Auto-set winner if a valid race-to-32 score is entered
       if (m.scoreA != null && m.scoreB != null) {
         if (m.scoreA === 32 && m.scoreB < 32) m.winner = "A";
@@ -215,6 +220,10 @@ export default function App() {
     for (const m of r.matches) {
       if (m.scoreA == null || m.scoreB == null) {
         alert("Her maç için skor girilmeli.");
+        return;
+      }
+      if (m.scoreA > 32 || m.scoreB > 32) {
+        alert("Skor 32'den fazla olamaz. Race-to-32 formatında maksimum skor 32'dir.");
         return;
       }
       if (!(m.scoreA === 32 || m.scoreB === 32)) {
@@ -274,58 +283,6 @@ export default function App() {
     setRounds([]);
     setTotals(Object.fromEntries(players.map((p) => [p, 0])));
     setByeCounts(Object.fromEntries(players.map((p) => [p, 0])));
-  }
-
-  function downloadCSV(filename: string, csv: string) {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function exportFixturesCSV() {
-    const header = [
-      "Round",
-      "Match",
-      "TeamA",
-      "TeamB",
-      "ScoreA",
-      "ScoreB",
-      "Winner",
-      "Byes",
-    ];
-    const rows: string[] = [header.join(",")];
-    rounds.forEach((r) => {
-      if (r.matches.length === 0) {
-        rows.push([r.number, "", "", "", "", "", "", r.byes.join(" ")].join(","));
-      } else {
-        r.matches.forEach((m, i) => {
-          rows.push(
-            [
-              r.number,
-              i + 1,
-              `${m.teamA[0]} & ${m.teamA[1]}`,
-              `${m.teamB[0]} & ${m.teamB[1]}`,
-              m.scoreA ?? "",
-              m.scoreB ?? "",
-              m.winner ?? "",
-              r.byes.join(" "),
-            ].join(",")
-          );
-        });
-      }
-    });
-    downloadCSV("fixtures.csv", rows.join("\n"));
-  }
-
-  function exportStandingsCSV() {
-    const ranking = currentRanking();
-    const rows: string[] = ["Player,TotalPoints,ByeCount"]; 
-    ranking.forEach((p) => rows.push(`${p},${totals[p] ?? 0},${byeCounts[p] ?? 0}`));
-    downloadCSV("standings.csv", rows.join("\n"));
   }
 
   const ranking = useMemo(() => currentRanking(), [players, totals]);
@@ -432,18 +389,6 @@ export default function App() {
             >
               Sıfırla
             </button>
-            <button
-              onClick={exportStandingsCSV}
-              className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow"
-            >
-              Sıralamayı CSV İndir
-            </button>
-            <button
-              onClick={exportFixturesCSV}
-              className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow"
-            >
-              Fikstürü CSV İndir
-            </button>
           </div>
         </section>
 
@@ -477,10 +422,12 @@ export default function App() {
                         <input
                           type="number"
                           min={0}
+                          max={32}
                           value={m.scoreA ?? ""}
-                          onChange={(e) =>
-                            updateMatchScore(rIdx, mIdx, { scoreA: Number(e.target.value) })
-                          }
+                          onChange={(e) => {
+                            const value = Math.min(32, Math.max(0, Number(e.target.value)));
+                            updateMatchScore(rIdx, mIdx, { scoreA: value });
+                          }}
                           className="w-full border rounded-xl px-3 py-2"
                         />
                       </div>
@@ -489,10 +436,12 @@ export default function App() {
                         <input
                           type="number"
                           min={0}
+                          max={32}
                           value={m.scoreB ?? ""}
-                          onChange={(e) =>
-                            updateMatchScore(rIdx, mIdx, { scoreB: Number(e.target.value) })
-                          }
+                          onChange={(e) => {
+                            const value = Math.min(32, Math.max(0, Number(e.target.value)));
+                            updateMatchScore(rIdx, mIdx, { scoreB: value });
+                          }}
                           className="w-full border rounded-xl px-3 py-2"
                         />
                       </div>
