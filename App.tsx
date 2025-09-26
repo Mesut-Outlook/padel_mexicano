@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
 // After removing required BYEs to make players divisible by 4, pair as:
@@ -118,23 +118,9 @@ export default function App() {
   function splitTeamPoints(
     p1: string,
     p2: string,
-    teamScore: number,
-    rankingSnapshot: string[]
+    teamScore: number
   ): Record<string, number> {
-    const idx = Object.fromEntries(
-      rankingSnapshot.map((name, i) => [name, i])
-    ) as Record<string, number>;
-    let high = p1;
-    let low = p2;
-    if (idx[p1] < idx[p2]) {
-      high = p1; // better rank
-      low = p2;
-    } else {
-      high = p2;
-      low = p1;
-    }
-    // Her oyuncu aldığı gerçek skor sayısını alır - takım skoru ikiye bölünmez
-    // Bunun yerine her oyuncu kendi takımının aldığı toplam skoru alır
+    // Her oyuncu kendi takımının aldığı gerçek skor sayısını alır
     return { [p1]: teamScore, [p2]: teamScore };
   }
 
@@ -255,14 +241,12 @@ export default function App() {
       const splitA = splitTeamPoints(
         teamA[0],
         teamA[1],
-        scoreA,
-        r.rankingSnapshot
+        scoreA
       );
       const splitB = splitTeamPoints(
         teamB[0],
         teamB[1],
-        scoreB,
-        r.rankingSnapshot
+        scoreB
       );
       const per = { ...splitA, ...splitB };
       m.perPlayerPoints = per;
