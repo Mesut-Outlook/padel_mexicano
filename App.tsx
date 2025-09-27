@@ -128,6 +128,27 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     }
   }, [tournamentData]);
 
+  // Fonksiyonları ve useMemo'yu da hooks bölümünde tanımla
+  function currentRanking(): string[] {
+    // Best (highest total) first; break ties by average, then by name
+    return [...players].sort((a, b) => {
+      const totalDiff = (totals[b] ?? 0) - (totals[a] ?? 0);
+      if (totalDiff !== 0) return totalDiff;
+      
+      // Eşit toplam puan durumunda averaja bak
+      const avgA = calculateAverage(a);
+      const avgB = calculateAverage(b);
+      const avgDiff = avgB - avgA;
+      if (avgDiff !== 0) return avgDiff;
+      
+      // Hem toplam hem averaj eşitse alfabetik sıralama
+      return a.localeCompare(b, "tr");
+    });
+  }
+
+  const ranking = useMemo(() => currentRanking(), [players, totals]);
+  const byesNeededNow = needByesForCount(players.length);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
@@ -193,6 +214,23 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     return takenPoints - givenPoints;
   }
 
+  function calculateMatchesPlayed(playerName: string): number {
+    let matchesPlayed = 0;
+    
+    rounds.forEach(round => {
+      if (!round.submitted) return; // Only count submitted rounds
+      
+      round.matches.forEach(match => {
+        const { teamA, teamB } = match;
+        
+        if (teamA.includes(playerName) || teamB.includes(playerName)) {
+          matchesPlayed++;
+        }
+      });
+    });
+
+    return matchesPlayed;
+  }
 
   function shuffle<T>(arr: T[]): T[] {
     const a = [...arr];
@@ -238,23 +276,6 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       return false;
     }
     return true;
-  }
-
-  function currentRanking(): string[] {
-    // Best (highest total) first; break ties by average, then by name
-    return [...players].sort((a, b) => {
-      const totalDiff = (totals[b] ?? 0) - (totals[a] ?? 0);
-      if (totalDiff !== 0) return totalDiff;
-      
-      // Eşit toplam puan durumunda averaja bak
-      const avgA = calculateAverage(a);
-      const avgB = calculateAverage(b);
-      const avgDiff = avgB - avgA;
-      if (avgDiff !== 0) return avgDiff;
-      
-      // Hem toplam hem averaj eşitse alfabetik sıralama
-      return a.localeCompare(b, "tr");
-    });
   }
 
   function needByesForCount(n: number): number {
@@ -512,9 +533,6 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       currentRound: 0
     });
   }
-
-  const ranking = useMemo(() => currentRanking(), [players, totals]);
-  const byesNeededNow = needByesForCount(players.length);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
@@ -797,12 +815,14 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                   <th className="py-2 pr-4">Oyuncu</th>
                   <th className="py-2 pr-4">Toplam Puan</th>
                   <th className="py-2 pr-4">Averaj</th>
+                  <th className="py-2 pr-4">Oynanan Maç</th>
                   <th className="py-2 pr-4">Bay</th>
                 </tr>
               </thead>
               <tbody>
                 {ranking.map((p, i) => {
                   const avg = calculateAverage(p);
+                  const matchesPlayed = calculateMatchesPlayed(p);
                   return (
                     <tr key={p} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-medium">{i + 1}</td>
@@ -813,6 +833,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                       }`}>
                         {avg > 0 ? '+' : ''}{avg}
                       </td>
+                      <td className="py-2 pr-4">{matchesPlayed}</td>
                       <td className="py-2 pr-4">{byeCounts[p] ?? 0}</td>
                     </tr>
                   );
