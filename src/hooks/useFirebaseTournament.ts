@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ref, onValue, set, off } from 'firebase/database';
+import { set, ref } from 'firebase/database';
 import { database } from '../firebase';
 
 export interface Match {
@@ -34,71 +34,23 @@ export function useFirebaseTournament(tournamentId: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Firebase bağlantısını kontrol et, hata varsa offline mod
-    try {
-      const tournamentRef = ref(database, `tournaments/${tournamentId}`);
-      
-      onValue(tournamentRef, 
-        (snapshot) => {
-          const value = snapshot.val();
-          if (value) {
-            setData(value);
-          } else {
-            // Turnuva yoksa varsayılan değerlerle başlat
-            const defaultData: TournamentData = {
-              players: [
-                "Oyuncu 1", "Oyuncu 2", "Oyuncu 3", "Oyuncu 4",
-                "Oyuncu 5", "Oyuncu 6", "Oyuncu 7", "Oyuncu 8"
-              ],
-              rounds: [],
-              totals: {},
-              byeCounts: {},
-              tournamentStarted: false,
-              currentRound: 0
-            };
-            setData(defaultData);
-          }
-          setLoading(false);
-        },
-        (error) => {
-          console.warn('Firebase bağlantısı başarısız, offline modda çalışıyor:', error.message);
-          // Offline modda varsayılan veriyi kullan
-          const offlineData: TournamentData = {
-            players: [
-              "Ahmet", "Mehmet", "Ali", "Can",
-              "Burak", "Serkan", "Emre", "Murat"
-            ],
-            rounds: [],
-            totals: {},
-            byeCounts: {},
-            tournamentStarted: false,
-            currentRound: 0
-          };
-          setData(offlineData);
-          setError('Offline modda çalışıyor - Firebase bağlantısı yok');
-          setLoading(false);
-        }
-      );
-
-      return () => off(tournamentRef);
-    } catch (error: any) {
-      console.warn('Firebase başlatma hatası, offline modda devam:', error.message);
-      // Firebase başlatılamazsa offline data ile devam et
-      const offlineData: TournamentData = {
-        players: [
-          "Ahmet", "Mehmet", "Ali", "Can",
-          "Burak", "Serkan", "Emre", "Murat"
-        ],
-        rounds: [],
-        totals: {},
-        byeCounts: {},
-        tournamentStarted: false,
-        currentRound: 0
-      };
-      setData(offlineData);
-      setError('Offline modda çalışıyor - Firebase yapılandırması yok');
-      setLoading(false);
-    }
+    // Hemen offline data ile başla - loading'de takılmasın
+    const offlineData: TournamentData = {
+      players: [
+        "Ahmet", "Mehmet", "Ali", "Can",
+        "Burak", "Serkan", "Emre", "Murat"
+      ],
+      rounds: [],
+      totals: {},
+      byeCounts: {},
+      tournamentStarted: false,
+      currentRound: 0
+    };
+    
+    setData(offlineData);
+    setError('Offline modda çalışıyor');
+    setLoading(false); // Hemen false yap - takılmasın
+    
   }, [tournamentId]);
 
   const updateTournament = async (updates: Partial<TournamentData>) => {
