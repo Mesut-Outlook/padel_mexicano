@@ -112,6 +112,22 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
 }) {
   const { data: tournamentData, loading, error, updateTournament } = useFirebaseTournament(tournamentId);
 
+  // Tüm useState'leri en üstte tanımla - conditional render'dan önce!
+  const [players, setPlayers] = useState<string[]>([]);
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [totals, setTotals] = useState<Record<string, number>>({});
+  const [byeCounts, setByeCounts] = useState<Record<string, number>>({});
+
+  // Firebase'den gelen verileri local state'e senkronize et
+  useEffect(() => {
+    if (tournamentData) {
+      setPlayers(tournamentData.players || []);
+      setRounds(tournamentData.rounds || []);
+      setTotals(tournamentData.totals || {});
+      setByeCounts(tournamentData.byeCounts || {});
+    }
+  }, [tournamentData]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
@@ -136,8 +152,6 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     );
   }
 
-  const [players, setPlayers] = useState<string[]>(tournamentData.players || []);
-
   type Match = {
     teamA: [string, string];
     teamB: [string, string];
@@ -154,24 +168,6 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     byes: string[]; // players resting this round
     submitted?: boolean;
   };
-
-  const [rounds, setRounds] = useState<Round[]>(tournamentData.rounds || []);
-  const [totals, setTotals] = useState<Record<string, number>>(
-    tournamentData.totals || Object.fromEntries((tournamentData.players || []).map((p) => [p, 0]))
-  );
-  const [byeCounts, setByeCounts] = useState<Record<string, number>>(
-    tournamentData.byeCounts || Object.fromEntries((tournamentData.players || []).map((p) => [p, 0]))
-  );
-
-  // Firebase'den gelen verileri local state'e senkronize et
-  useEffect(() => {
-    if (tournamentData) {
-      setPlayers(tournamentData.players || []);
-      setRounds(tournamentData.rounds || []);
-      setTotals(tournamentData.totals || {});
-      setByeCounts(tournamentData.byeCounts || {});
-    }
-  }, [tournamentData]);
 
   function calculateAverage(playerName: string): number {
     // Averaj = Alınan Puan - Verilen Puan
