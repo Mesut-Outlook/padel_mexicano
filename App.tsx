@@ -43,6 +43,30 @@ export default function App() {
     Object.fromEntries(players.map((p) => [p, 0]))
   );
 
+  function calculateAverage(playerName: string): number {
+    // Averaj = Alınan Puan - Verilen Puan
+    let takenPoints = 0;
+    let givenPoints = 0;
+
+    rounds.forEach(round => {
+      if (!round.submitted) return;
+      
+      round.matches.forEach(match => {
+        const { teamA, teamB, scoreA = 0, scoreB = 0 } = match;
+        
+        if (teamA.includes(playerName)) {
+          takenPoints += scoreA;
+          givenPoints += scoreB;
+        } else if (teamB.includes(playerName)) {
+          takenPoints += scoreB;
+          givenPoints += scoreA;
+        }
+      });
+    });
+
+    return takenPoints - givenPoints;
+  }
+
 
   function shuffle<T>(arr: T[]): T[] {
     const a = [...arr];
@@ -91,10 +115,18 @@ export default function App() {
   }
 
   function currentRanking(): string[] {
-    // Best (highest total) first; break ties by name to make deterministic
+    // Best (highest total) first; break ties by average, then by name
     return [...players].sort((a, b) => {
-      const diff = (totals[b] ?? 0) - (totals[a] ?? 0);
-      if (diff !== 0) return diff;
+      const totalDiff = (totals[b] ?? 0) - (totals[a] ?? 0);
+      if (totalDiff !== 0) return totalDiff;
+      
+      // Eşit toplam puan durumunda averaja bak
+      const avgA = calculateAverage(a);
+      const avgB = calculateAverage(b);
+      const avgDiff = avgB - avgA;
+      if (avgDiff !== 0) return avgDiff;
+      
+      // Hem toplam hem averaj eşitse alfabetik sıralama
       return a.localeCompare(b, "tr");
     });
   }
@@ -570,25 +602,34 @@ export default function App() {
                   <th className="py-2 pr-4">#</th>
                   <th className="py-2 pr-4">Oyuncu</th>
                   <th className="py-2 pr-4">Toplam Puan</th>
+                  <th className="py-2 pr-4">Averaj</th>
                   <th className="py-2 pr-4">Bay</th>
                 </tr>
               </thead>
               <tbody>
-                {ranking.map((p, i) => (
-                  <tr key={p} className="border-b last:border-0">
-                    <td className="py-2 pr-4 font-medium">{i + 1}</td>
-                    <td className="py-2 pr-4">{p}</td>
-                    <td className="py-2 pr-4 font-semibold">{totals[p] ?? 0}</td>
-                    <td className="py-2 pr-4">{byeCounts[p] ?? 0}</td>
-                  </tr>
-                ))}
+                {ranking.map((p, i) => {
+                  const avg = calculateAverage(p);
+                  return (
+                    <tr key={p} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-medium">{i + 1}</td>
+                      <td className="py-2 pr-4">{p}</td>
+                      <td className="py-2 pr-4 font-semibold">{totals[p] ?? 0}</td>
+                      <td className={`py-2 pr-4 font-semibold ${
+                        avg > 0 ? 'text-green-600' : avg < 0 ? 'text-red-600' : 'text-gray-600'
+                      }`}>
+                        {avg > 0 ? '+' : ''}{avg}
+                      </td>
+                      <td className="py-2 pr-4">{byeCounts[p] ?? 0}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </section>
 
         <footer className="text-xs text-gray-500 mt-6">
-          Notlar: (1) Race-to-32: İlk 32 puana ulaşan takım kazanır (örn. 32-15, 32-20 vb. geçerlidir). (2) Her oyuncu kendi takımının aldığı skor sayısını puan olarak alır. (3) Oyuncu sayısı 4'ün katı değilse her turda gerekli sayıda bay otomatik atanır.
+          Notlar: (1) Race-to-32: İlk 32 puana ulaşan takım kazanır (örn. 32-15, 32-20 vb. geçerlidir). (2) Her oyuncu kendi takımının aldığı skor sayısını puan olarak alır. (3) Averaj = Alınan Puan - Verilen Puan (pozitif iyi, negatif kötü). (4) Sıralama: Önce toplam puan, sonra averaj. (5) Oyuncu sayısı 4'ün katı değilse her turda gerekli sayıda bay otomatik atanır.
         </footer>
       </div>
     </div>
