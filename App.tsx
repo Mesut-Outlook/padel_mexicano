@@ -10,6 +10,11 @@ import { useFirebaseTournament } from "./src/hooks/useFirebaseTournament";
 export default function App() {
   const [tournamentId, setTournamentId] = useState<string>("");
   const [showJoinForm, setShowJoinForm] = useState(true);
+  const [savedTournaments, setSavedTournaments] = useState<string[]>(() => {
+    // Local storage'dan kayıtlı turnuvaları al
+    const saved = localStorage.getItem('mexicano-tournaments');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   // Turnuva ID'si yoksa giriş formu göster
   if (showJoinForm) {
@@ -37,10 +42,33 @@ export default function App() {
                 <span className="text-blue-600 font-medium">Turnuva yoksa otomatik oluşturulur.</span>
               </p>
             </div>
+
+            {savedTournaments.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Önceki Turnuvalar
+                </label>
+                <div className="space-y-2">
+                  {savedTournaments.map((tournament, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setTournamentId(tournament)}
+                      className="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm transition-colors"
+                    >
+                      🏆 {tournament}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             
             <button
               onClick={() => {
                 if (tournamentId.trim()) {
+                  // Turnuva ID'sini kayıtlı listesine ekle
+                  const updatedTournaments = [tournamentId, ...savedTournaments.filter(t => t !== tournamentId)].slice(0, 5);
+                  setSavedTournaments(updatedTournaments);
+                  localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
                   setShowJoinForm(false);
                 } else {
                   alert("Lütfen bir turnuva ID'si girin");
