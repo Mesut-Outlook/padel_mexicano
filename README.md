@@ -1,16 +1,30 @@
-# Mexicano Padel Tournament Management System
+# 🏸 Mexicano Padel Turnuva Yöneticisi (Firebase Destekli)
 
-Bu proje, Mexicano formatında padel turnuvaları düzenlemek için geliştirilmiş bir web uygulamasıdır.
+Bu uygulama, değişken sayıda oyuncuyla Mexicano formatında padel turnuvaları düzenlemenizi sağlar. **Real-time Firebase entegrasyonu** ile birden fazla kişi aynı turnuvayı eşzamanlı olarak takip edebilir ve yönetebilir.
 
-## Özellikler
+## 🌟 Özellikler
 
-- **Değişken Oyuncu Sayısı**: En az 8 oyuncu (çift sayıda olmalı)
-- **İlk Tur Rastgele**: İlk tur eşleşmeleri tamamen rastgele oluşturulur
-- **Sonraki Turlar Sıralamaya Göre**: Mevcut sıralamaya göre seeded eşleşmeler
-- **Race-to-32 Format**: Maçlar 32 puana kadar oynanır
-- **Adil Puan Dağıtımı**: Takım içinde %55/%45 oranında puan dağıtımı
-- **Otomatik Bay Sistemi**: 4'ün katı olmayan oyuncu sayıları için otomatik bay ataması
-- **CSV Export**: Fikstür ve sıralamayı CSV olarak dışa aktarma
+### 🏆 Turnuva Yönetimi
+- **Değişken oyuncu sayısı**: En az 8, çift sayıda oyuncu
+- **Otomatik eşleşme**: İlk tur rastgele, sonraki turlar sıralamaya göre
+- **Bay sistemi**: Oyuncu sayısı 4'ün katı değilse otomatik bay ataması
+- **Race-to-32 formatı**: İlk 32'ye ulaşan takım kazanır
+
+### 📊 Gelişmiş Sıralama
+- **Toplam puan**: Her oyuncunun maçlarda aldığı toplam skor
+- **Averaj sistemi**: Alınan puan - Verilen puan (performans göstergesi)
+- **Akıllı sıralama**: Önce toplam puan, sonra averaj, sonra alfabetik
+
+### 🔄 Real-time İşbirliği
+- **Firebase entegrasyonu**: Anlık veri senkronizasyonu
+- **Çoklu kullanıcı**: Aynı turnuvayı birden fazla kişi yönetebilir
+- **Turnuva ID**: Basit kod ile turnuvaya katılım
+- **Otomatik güncelleme**: Skorlar ve sıralama anlık olarak güncellenir
+
+### 📈 Planlama Araçları
+- **Optimal tur hesaplama**: Eşit oyun için gereken tur sayısı
+- **İlerleme takibi**: Hangi turda olduğunuz ve kalan maç sayısı
+- **Validasyon**: Tüm girişler otomatik kontrol edilir
 
 ## Kurulum
 

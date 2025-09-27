@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useFirebaseTournament } from "./src/hooks/useFirebaseTournament";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
 // After removing required BYEs to make players divisible by 4, pair as:
@@ -7,16 +8,118 @@ import { useMemo, useState } from "react";
 // Points split within each team using the round's starting ranking snapshot: 55% to lower-ranked, 45% to higher-ranked.
 
 export default function App() {
-  const [players, setPlayers] = useState<string[]>([
-    "Ahmet",
-    "Mehmet",
-    "Ali",
-    "Can",
-    "Burak",
-    "Serkan",
-    "Emre",
-    "Murat",
-  ]);
+  const [tournamentId, setTournamentId] = useState<string>("");
+  const [showJoinForm, setShowJoinForm] = useState(true);
+
+  // Turnuva ID'si yoksa giriş formu göster
+  if (showJoinForm) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+          <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">
+            🏸 Mexicano Padel
+          </h1>
+          
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Turnuva ID'si
+              </label>
+              <input
+                type="text"
+                placeholder="turnuva-ismi-2024"
+                value={tournamentId}
+                onChange={(e) => setTournamentId(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Aynı turnuvaya katılacak herkes aynı ID'yi kullanmalı
+              </p>
+            </div>
+            
+            <button
+              onClick={() => {
+                if (tournamentId.trim()) {
+                  setShowJoinForm(false);
+                } else {
+                  alert("Lütfen bir turnuva ID'si girin");
+                }
+              }}
+              disabled={!tournamentId.trim()}
+              className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl font-medium hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
+            >
+              Turnuvaya Katıl
+            </button>
+            
+            <div className="text-center">
+              <p className="text-sm text-gray-600 mb-2">Örnek ID'ler:</p>
+              <div className="space-x-2">
+                <button 
+                  onClick={() => setTournamentId("demo-turnuva")}
+                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200"
+                >
+                  demo-turnuva
+                </button>
+                <button 
+                  onClick={() => setTournamentId("test-2024")}
+                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200"
+                >
+                  test-2024
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <TournamentApp tournamentId={tournamentId} setShowJoinForm={setShowJoinForm} />;
+}
+
+function TournamentApp({ tournamentId, setShowJoinForm }: { 
+  tournamentId: string; 
+  setShowJoinForm: (show: boolean) => void; 
+}) {
+  const { data: tournamentData, loading, error, updateTournament } = useFirebaseTournament(tournamentId);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Turnuva yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Bağlantı Hatası</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <button
+            onClick={() => setShowJoinForm(true)}
+            className="bg-blue-600 text-white py-2 px-6 rounded-xl hover:bg-blue-700"
+          >
+            Geri Dön
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tournamentData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
+        <p className="text-gray-600">Turnuva verisi bulunamadı...</p>
+      </div>
+    );
+  }
+
+  const [players, setPlayers] = useState<string[]>(tournamentData.players || []);
 
   type Match = {
     teamA: [string, string];
@@ -35,13 +138,23 @@ export default function App() {
     submitted?: boolean;
   };
 
-  const [rounds, setRounds] = useState<Round[]>([]);
-  const [totals, setTotals] = useState<Record<string, number>>(() =>
-    Object.fromEntries(players.map((p) => [p, 0]))
+  const [rounds, setRounds] = useState<Round[]>(tournamentData.rounds || []);
+  const [totals, setTotals] = useState<Record<string, number>>(
+    tournamentData.totals || Object.fromEntries((tournamentData.players || []).map((p) => [p, 0]))
   );
-  const [byeCounts, setByeCounts] = useState<Record<string, number>>(() =>
-    Object.fromEntries(players.map((p) => [p, 0]))
+  const [byeCounts, setByeCounts] = useState<Record<string, number>>(
+    tournamentData.byeCounts || Object.fromEntries((tournamentData.players || []).map((p) => [p, 0]))
   );
+
+  // Firebase'den gelen verileri local state'e senkronize et
+  useEffect(() => {
+    if (tournamentData) {
+      setPlayers(tournamentData.players || []);
+      setRounds(tournamentData.rounds || []);
+      setTotals(tournamentData.totals || {});
+      setByeCounts(tournamentData.byeCounts || {});
+    }
+  }, [tournamentData]);
 
   function calculateAverage(playerName: string): number {
     // Averaj = Alınan Puan - Verilen Puan
@@ -204,14 +317,27 @@ export default function App() {
     for (let i = 0; i < teams.length; i += 2) {
       matches.push({ teamA: teams[i], teamB: teams[i + 1] });
     }
-    setRounds([
+    const newRounds = [
       {
         number: 1,
         matches,
         rankingSnapshot: ranking0,
         byes,
       },
-    ]);
+    ];
+    setRounds(newRounds);
+    
+    // Firebase'e senkronize et
+    setTimeout(() => {
+      updateTournament({
+        players,
+        rounds: newRounds,
+        totals: initialTotals,
+        byeCounts: Object.fromEntries(players.map((p) => [p, 0])),
+        tournamentStarted: true,
+        currentRound: 1
+      });
+    }, 100);
   }
 
   function addNextRound() {
@@ -334,12 +460,44 @@ export default function App() {
       copy[roundIndex] = { ...r, submitted: true };
       return copy;
     });
+
+    // Firebase'e senkronize et
+    setTimeout(() => {
+      const updatedTotals = { ...totals };
+      for (const [n, v] of Object.entries(perPlayerUpdates)) {
+        updatedTotals[n] = (updatedTotals[n] ?? 0) + v;
+      }
+      const updatedRounds = [...rounds];
+      updatedRounds[roundIndex] = { ...r, submitted: true };
+      
+      updateTournament({
+        players,
+        rounds: updatedRounds,
+        totals: updatedTotals,
+        byeCounts,
+        tournamentStarted: true,
+        currentRound: updatedRounds.length
+      });
+    }, 100);
   }
 
   function resetTournament() {
+    const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
+    const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
+    
     setRounds([]);
-    setTotals(Object.fromEntries(players.map((p) => [p, 0])));
-    setByeCounts(Object.fromEntries(players.map((p) => [p, 0])));
+    setTotals(initialTotals);
+    setByeCounts(initialByes);
+
+    // Firebase'e senkronize et
+    updateTournament({
+      players,
+      rounds: [],
+      totals: initialTotals,
+      byeCounts: initialByes,
+      tournamentStarted: false,
+      currentRound: 0
+    });
   }
 
   const ranking = useMemo(() => currentRanking(), [players, totals]);
@@ -349,12 +507,30 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
       <div className="max-w-6xl mx-auto">
         <header className="mb-6">
-          <h1 className="text-3xl font-bold">Mexicano Padel – Değişken Oyuncu Sayısı (≥8, çift)</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Tur 1 rastgele; sonraki turlar, o turun başındaki sıralamaya göre: kalan oyuncular (gerekli baylar çıkarıldıktan sonra) {" "}
-            <span className="font-semibold">(1&son) vs (2&son-1), (3&son-2) vs (4&son-3)</span> şeklinde eşleşir.
-            Maçlar <span className="font-semibold">32'ye kadar</span> oynanır; kazananın skoru 32 olmalıdır.
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold">Mexicano Padel – Değişken Oyuncu Sayısı (≥8, çift)</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Tur 1 rastgele; sonraki turlar, o turun başındaki sıralamaya göre: kalan oyuncular (gerekli baylar çıkarıldıktan sonra) {" "}
+                <span className="font-semibold">(1&son) vs (2&son-1), (3&son-2) vs (4&son-3)</span> şeklinde eşleşir.
+                Maçlar <span className="font-semibold">32'ye kadar</span> oynanır; kazananın skoru 32 olmalıdır.
+              </p>
+              <div className="flex items-center gap-4 mt-2">
+                <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                  🏆 Turnuva: {tournamentId}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {rounds.length > 0 ? `${rounds.length} tur tamamlandı` : 'Turnuva başlamadı'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowJoinForm(true)}
+              className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded-lg transition-colors"
+            >
+              🚪 Çıkış
+            </button>
+          </div>
         </header>
 
         {/* Player editor */}
