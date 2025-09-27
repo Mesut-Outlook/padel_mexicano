@@ -28,32 +28,62 @@ export interface TournamentData {
 
 export function useFirebaseTournament(tournamentId: string) {
   const [data, setData] = useState<TournamentData | null>(null);
-  const [loading, setLoading] = useState(false); // Hemen false başla
-  const [error] = useState<string | null>('Offline modda çalışıyor');
+  const [loading, setLoading] = useState(false);
+  const [error] = useState<string | null>(null);
+
+  const getTournamentStorageKey = (id: string) => `mexicano-tournament-${id}`;
 
   useEffect(() => {
-    // Tamamen offline - Firebase yok
-    const offlineData: TournamentData = {
-      players: [
-        "Ahmet", "Mehmet", "Ali", "Can",
-        "Burak", "Serkan", "Emre", "Murat"
-      ],
+    // localStorage'dan turnuva verilerini yükle
+    const storageKey = getTournamentStorageKey(tournamentId);
+    const savedData = localStorage.getItem(storageKey);
+    
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        setData(parsedData);
+      } catch (err) {
+        console.error('Turnuva verisi yüklenirken hata:', err);
+        // Hatalı veri varsa default data kullan
+        setData(getDefaultTournamentData());
+      }
+    } else {
+      // Yeni turnuva - default verilerle başla
+      setData(getDefaultTournamentData());
+    }
+    
+    setLoading(false);
+  }, [tournamentId]);
+
+  function getDefaultTournamentData(): TournamentData {
+    return {
+      players: [],
       rounds: [],
       totals: {},
       byeCounts: {},
       tournamentStarted: false,
       currentRound: 0
     };
-    
-    setData(offlineData);
-    setLoading(false);
-    
-  }, [tournamentId]);
+  }
 
-  const updateTournament = async (updates: Partial<TournamentData>) => {
-    // Offline modda sadece local state'i güncelle
-    setData(prev => prev ? { ...prev, ...updates } : null);
+  const updateTournament = (newData: TournamentData) => {
+    setData(newData);
+    // localStorage'a kaydet
+    const storageKey = getTournamentStorageKey(tournamentId);
+    localStorage.setItem(storageKey, JSON.stringify(newData));
   };
 
-  return { data, loading, error, updateTournament };
+  const deleteTournament = () => {
+    const storageKey = getTournamentStorageKey(tournamentId);
+    localStorage.removeItem(storageKey);
+    setData(getDefaultTournamentData());
+  };
+
+  return {
+    data,
+    loading,
+    error,
+    updateTournament,
+    deleteTournament
+  };
 }

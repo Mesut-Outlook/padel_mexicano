@@ -110,7 +110,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
   tournamentId: string; 
   setShowJoinForm: (show: boolean) => void; 
 }) {
-  const { data: tournamentData, loading, error, updateTournament } = useFirebaseTournament(tournamentId);
+  const { data: tournamentData, loading, error, updateTournament, deleteTournament } = useFirebaseTournament(tournamentId);
 
   // Tüm useState'leri en üstte tanımla - conditional render'dan önce!
   const [players, setPlayers] = useState<string[]>([]);
@@ -127,6 +127,59 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       setByeCounts(tournamentData.byeCounts || {});
     }
   }, [tournamentData]);
+
+  // State değişikliklerini localStorage'a kaydetmek için helper fonksiyonlar
+  const updatePlayersAndSave = (newPlayers: string[]) => {
+    setPlayers(newPlayers);
+    const newData = {
+      players: newPlayers,
+      rounds,
+      totals,
+      byeCounts,
+      tournamentStarted: newPlayers.length > 0 && rounds.length > 0,
+      currentRound: rounds.length
+    };
+    updateTournament(newData);
+  };
+
+  const updateRoundsAndSave = (newRounds: Round[]) => {
+    setRounds(newRounds);
+    const newData = {
+      players,
+      rounds: newRounds,
+      totals,
+      byeCounts,
+      tournamentStarted: players.length > 0 && newRounds.length > 0,
+      currentRound: newRounds.length
+    };
+    updateTournament(newData);
+  };
+
+  const updateTotalsAndSave = (newTotals: Record<string, number>) => {
+    setTotals(newTotals);
+    const newData = {
+      players,
+      rounds,
+      totals: newTotals,
+      byeCounts,
+      tournamentStarted: players.length > 0 && rounds.length > 0,
+      currentRound: rounds.length
+    };
+    updateTournament(newData);
+  };
+
+  const updateByeCountsAndSave = (newByeCounts: Record<string, number>) => {
+    setByeCounts(newByeCounts);
+    const newData = {
+      players,
+      rounds,
+      totals,
+      byeCounts: newByeCounts,
+      tournamentStarted: players.length > 0 && rounds.length > 0,
+      currentRound: rounds.length
+    };
+    updateTournament(newData);
+  };
 
   // Fonksiyonları ve useMemo'yu da hooks bölümünde tanımla
   function currentRanking(): string[] {
@@ -359,19 +412,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
         byes,
       },
     ];
-    setRounds(newRounds);
-    
-    // Firebase'e senkronize et
-    setTimeout(() => {
-      updateTournament({
-        players,
-        rounds: newRounds,
-        totals: initialTotals,
-        byeCounts: Object.fromEntries(players.map((p) => [p, 0])),
-        tournamentStarted: true,
-        currentRound: 1
-      });
-    }, 100);
+    updateRoundsAndSave(newRounds);
   }
 
   function addNextRound() {
@@ -389,18 +430,17 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     const pairs = seededPairs(available);
     const matches: Match[] = pairs.map(([[a1, a2], [b1, b2]]) => ({ teamA: [a1, a2], teamB: [b1, b2] }));
 
-    setRounds((prev) => [
-      ...prev,
+    const newRounds = [
+      ...rounds,
       { number: nextNo, matches, rankingSnapshot: ranking, byes },
-    ]);
+    ];
+    updateRoundsAndSave(newRounds);
 
     // track byes
     if (byes.length) {
-      setByeCounts((prev) => {
-        const copy = { ...prev };
-        byes.forEach((p) => (copy[p] = (copy[p] ?? 0) + 1));
-        return copy;
-      });
+      const newByeCounts = { ...byeCounts };
+      byes.forEach((p) => (newByeCounts[p] = (newByeCounts[p] ?? 0) + 1));
+      updateByeCountsAndSave(newByeCounts);
     }
   }
 
@@ -409,10 +449,10 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     matchIndex: number,
     data: Partial<Match>
   ) {
-    setRounds((prev) => {
-      const copy = [...prev];
-      const r = { ...copy[roundIndex] };
-      let m = { ...r.matches[matchIndex], ...data };
+    const newRounds = rounds.map((r, i) => {
+      if (i !== roundIndex) return r;
+      const copy = { ...r };
+      let m = { ...copy.matches[matchIndex], ...data };
       
       // 32'den fazla skor girilmesini engelle
       if (m.scoreA != null && m.scoreA > 32) m.scoreA = 32;
@@ -424,11 +464,11 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
         else if (m.scoreB === 32 && m.scoreA < 32) m.winner = "B";
         else m.winner = undefined; // neither team has exactly 32 or both have 32+
       }
-      r.matches = [...r.matches];
-      r.matches[matchIndex] = m;
-      copy[roundIndex] = r;
+      copy.matches = [...copy.matches];
+      copy.matches[matchIndex] = m;
       return copy;
     });
+    updateRoundsAndSave(newRounds);
   }
 
   function submitRound(roundIndex: number) {
@@ -481,57 +521,24 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       }
     });
 
-    setTotals((prev) => {
-      const copy = { ...prev };
-      for (const [n, v] of Object.entries(perPlayerUpdates)) {
-        copy[n] = (copy[n] ?? 0) + v;
-      }
-      return copy;
-    });
+    const newTotals = { ...totals };
+    for (const [n, v] of Object.entries(perPlayerUpdates)) {
+      newTotals[n] = (newTotals[n] ?? 0) + v;
+    }
+    updateTotalsAndSave(newTotals);
 
-    setRounds((prev) => {
-      const copy = [...prev];
-      copy[roundIndex] = { ...r, submitted: true };
-      return copy;
-    });
-
-    // Firebase'e senkronize et
-    setTimeout(() => {
-      const updatedTotals = { ...totals };
-      for (const [n, v] of Object.entries(perPlayerUpdates)) {
-        updatedTotals[n] = (updatedTotals[n] ?? 0) + v;
-      }
-      const updatedRounds = [...rounds];
-      updatedRounds[roundIndex] = { ...r, submitted: true };
-      
-      updateTournament({
-        players,
-        rounds: updatedRounds,
-        totals: updatedTotals,
-        byeCounts,
-        tournamentStarted: true,
-        currentRound: updatedRounds.length
-      });
-    }, 100);
+    const newRounds = [...rounds];
+    newRounds[roundIndex] = { ...r, submitted: true };
+    updateRoundsAndSave(newRounds);
   }
 
   function resetTournament() {
     const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
     const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
     
-    setRounds([]);
-    setTotals(initialTotals);
-    setByeCounts(initialByes);
-
-    // Firebase'e senkronize et
-    updateTournament({
-      players,
-      rounds: [],
-      totals: initialTotals,
-      byeCounts: initialByes,
-      tournamentStarted: false,
-      currentRound: 0
-    });
+    updateRoundsAndSave([]);
+    updateTotalsAndSave(initialTotals);
+    updateByeCountsAndSave(initialByes);
   }
 
   return (
@@ -560,12 +567,25 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                 )}
               </div>
             </div>
-            <button
-              onClick={() => setShowJoinForm(true)}
-              className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded-lg transition-colors"
-            >
-              🚪 Çıkış
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (confirm('Bu turnuvayı tamamen silmek istediğinizden emin misiniz? Tüm veriler kaybolacak!')) {
+                    deleteTournament();
+                    setShowJoinForm(true);
+                  }
+                }}
+                className="text-sm bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg transition-colors"
+              >
+                🗑️ Sil
+              </button>
+              <button
+                onClick={() => setShowJoinForm(true)}
+                className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded-lg transition-colors"
+              >
+                🚪 Çıkış
+              </button>
+            </div>
           </div>
         </header>
 
@@ -607,7 +627,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                 const name = prompt("Yeni oyuncu adı (oyuncu sayısı çift ve ≥8 olmalı)");
                 if (!name) return;
                 const next = [...players, name];
-                setPlayers(next);
+                updatePlayersAndSave(next);
                 setTotals((prev) => ({ ...prev, [name]: 0 }));
                 setByeCounts((prev) => ({ ...prev, [name]: 0 }));
               }}
@@ -628,7 +648,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                   return;
                 }
                 const next = players.filter((p) => p !== name);
-                setPlayers(next);
+                updatePlayersAndSave(next);
                 setTotals((prev) => {
                   const { [name]: _, ...rest } = prev;
                   return rest as Record<string, number>;
