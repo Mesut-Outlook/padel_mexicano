@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react';
-import { set, ref } from 'firebase/database';
-import { database } from '../firebase';
 
 export interface Match {
   teamA: [string, string];
@@ -30,11 +28,11 @@ export interface TournamentData {
 
 export function useFirebaseTournament(tournamentId: string) {
   const [data, setData] = useState<TournamentData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false); // Hemen false başla
+  const [error] = useState<string | null>('Offline modda çalışıyor');
 
   useEffect(() => {
-    // Hemen offline data ile başla - loading'de takılmasın
+    // Tamamen offline - Firebase yok
     const offlineData: TournamentData = {
       players: [
         "Ahmet", "Mehmet", "Ali", "Can",
@@ -48,21 +46,13 @@ export function useFirebaseTournament(tournamentId: string) {
     };
     
     setData(offlineData);
-    setError('Offline modda çalışıyor');
-    setLoading(false); // Hemen false yap - takılmasın
+    setLoading(false);
     
   }, [tournamentId]);
 
   const updateTournament = async (updates: Partial<TournamentData>) => {
-    try {
-      const tournamentRef = ref(database, `tournaments/${tournamentId}`);
-      await set(tournamentRef, { ...data, ...updates });
-    } catch (error: any) {
-      // Firebase hatası olursa sessizce devam et (offline mode)
-      console.warn('Firebase güncelleme başarısız, local modda devam:', error.message);
-      // Local state'i güncelle
-      setData(prev => prev ? { ...prev, ...updates } : null);
-    }
+    // Offline modda sadece local state'i güncelle
+    setData(prev => prev ? { ...prev, ...updates } : null);
   };
 
   return { data, loading, error, updateTournament };
