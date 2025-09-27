@@ -33,7 +33,8 @@ export default function App() {
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-xs text-gray-500 mt-2">
-                Aynı turnuvaya katılacak herkes aynı ID'yi kullanmalı
+                Aynı turnuvaya katılacak herkes aynı ID'yi kullanmalı.<br/>
+                <span className="text-blue-600 font-medium">Turnuva yoksa otomatik oluşturulur.</span>
               </p>
             </div>
             
@@ -48,7 +49,7 @@ export default function App() {
               disabled={!tournamentId.trim()}
               className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl font-medium hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
             >
-              Turnuvaya Katıl
+              Turnuvayı Başlat / Katıl
             </button>
             
             <div className="text-center">
