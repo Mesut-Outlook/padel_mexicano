@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ref, onValue, set, remove } from 'firebase/database';
+import { database } from '../firebase';
 
 export interface Match {
   teamA: [string, string];
@@ -29,56 +31,100 @@ export interface TournamentData {
 
 export function useFirebaseTournament(tournamentId: string) {
   const [data, setData] = useState<TournamentData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const getTournamentStorageKey = (id: string) => `mexicano-tournament-${id}`;
+  const getTournamentStorageKey = useCallback((id: string) => `mexicano-tournament-${id}`, []);
+  const tournamentRef = useMemo(() => ref(database, `tournaments/${tournamentId}`), [tournamentId]);
+
+  const getDefaultTournamentData = useCallback((): TournamentData => ({
+    players: [],
+    rounds: [],
+    totals: {},
+    byeCounts: {},
+    courtCount: 2,
+    tournamentStarted: false,
+    currentRound: 0
+  }), []);
+
+  const normalizeTournamentData = useCallback((raw: Partial<TournamentData> | null | undefined): TournamentData => ({
+    players: raw?.players ?? [],
+    rounds: raw?.rounds ?? [],
+    totals: raw?.totals ?? {},
+    byeCounts: raw?.byeCounts ?? {},
+    courtCount: raw?.courtCount ?? 2,
+    tournamentStarted: raw?.tournamentStarted ?? false,
+    currentRound: raw?.currentRound ?? 0
+  }), []);
 
   useEffect(() => {
-    // localStorage'dan turnuva verilerini yükle
+    if (!tournamentId) {
+      setData(getDefaultTournamentData());
+      setLoading(false);
+      return;
+    }
+
     const storageKey = getTournamentStorageKey(tournamentId);
-    const savedData = localStorage.getItem(storageKey);
-    
-    if (savedData) {
+    const savedDataRaw = localStorage.getItem(storageKey);
+    if (savedDataRaw) {
       try {
-        const parsedData = JSON.parse(savedData);
-        setData(parsedData);
-      } catch (err) {
-        console.error('Turnuva verisi yüklenirken hata:', err);
-        // Hatalı veri varsa default data kullan
+        const savedData = JSON.parse(savedDataRaw);
+        setData(normalizeTournamentData(savedData));
+      } catch (parseError) {
+        console.warn('Yerel turnuva verisi çözümlenemedi, varsayılan değer kullanılacak.', parseError);
         setData(getDefaultTournamentData());
       }
-    } else {
-      // Yeni turnuva - default verilerle başla
-      setData(getDefaultTournamentData());
     }
-    
-    setLoading(false);
-  }, [tournamentId]);
 
-  function getDefaultTournamentData(): TournamentData {
-    return {
-      players: [],
-      rounds: [],
-      totals: {},
-      byeCounts: {},
-      tournamentStarted: false,
-      currentRound: 0
+    setLoading(true);
+    const unsubscribe = onValue(tournamentRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const remoteData = normalizeTournamentData(snapshot.val());
+        setData(remoteData);
+        setError(null);
+        localStorage.setItem(storageKey, JSON.stringify(remoteData));
+      } else {
+        const defaultData = getDefaultTournamentData();
+        setData(defaultData);
+        localStorage.setItem(storageKey, JSON.stringify(defaultData));
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error('Firebase turnuva verisine erişilemedi:', err);
+      setError('Turnuva verisine ulaşılamadı. Yerel veri kullanılacak.');
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribe();
     };
-  }
+  }, [tournamentId, tournamentRef, getDefaultTournamentData, getTournamentStorageKey, normalizeTournamentData]);
 
-  const updateTournament = (newData: TournamentData) => {
-    setData(newData);
-    // localStorage'a kaydet
+  const updateTournament = useCallback(async (newData: TournamentData) => {
     const storageKey = getTournamentStorageKey(tournamentId);
-    localStorage.setItem(storageKey, JSON.stringify(newData));
-  };
+    try {
+      await set(tournamentRef, newData);
+      localStorage.setItem(storageKey, JSON.stringify(newData));
+      setData(newData);
+      setError(null);
+    } catch (err) {
+      console.error('Turnuva güncellenemedi:', err);
+      setError('Turnuva güncellenemedi. İnternet bağlantınızı kontrol edin.');
+      setData(newData);
+      localStorage.setItem(storageKey, JSON.stringify(newData));
+    }
+  }, [getTournamentStorageKey, tournamentId, tournamentRef]);
 
-  const deleteTournament = () => {
+  const deleteTournament = useCallback(async () => {
     const storageKey = getTournamentStorageKey(tournamentId);
+    try {
+      await remove(tournamentRef);
+    } catch (err) {
+      console.error('Turnuva silinemedi:', err);
+    }
     localStorage.removeItem(storageKey);
     setData(getDefaultTournamentData());
-  };
+  }, [getTournamentStorageKey, tournamentId, tournamentRef, getDefaultTournamentData]);
 
   return {
     data,

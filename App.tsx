@@ -240,6 +240,42 @@ function TournamentApp({
   const ranking = useMemo(() => currentRanking(), [players, totals]);
   const totalByeAssignments = useMemo(() => Object.values(byeCounts).reduce((sum, count) => sum + count, 0), [byeCounts]);
   const byesNeededNow = needByesForCount(players.length);
+  const matchBalance = useMemo(() => {
+    const counts: Record<string, number> = {};
+    players.forEach((p) => {
+      counts[p] = 0;
+    });
+
+    rounds.forEach((round) => {
+      if (!round.submitted) return;
+      round.matches.forEach(({ teamA, teamB }) => {
+        [...teamA, ...teamB].forEach((player) => {
+          if (counts[player] == null) counts[player] = 0;
+          counts[player] += 1;
+        });
+      });
+    });
+
+    const values = Object.values(counts);
+    const max = values.length ? Math.max(...values) : 0;
+    const min = values.length ? Math.min(...values) : 0;
+    const playersNeedingRest = Object.entries(counts)
+      .filter(([, value]) => value === max)
+      .map(([name]) => name);
+    const playersNeedingPlay = Object.entries(counts)
+      .filter(([, value]) => value === min)
+      .map(([name]) => name);
+
+    return {
+      counts,
+      max,
+      min,
+      spread: max - min,
+      isBalanced: max === min,
+      playersNeedingRest,
+      playersNeedingPlay,
+    };
+  }, [players, rounds]);
 
   if (loading) {
     return (
@@ -304,24 +340,6 @@ function TournamentApp({
     });
 
     return takenPoints - givenPoints;
-  }
-
-  function calculateMatchesPlayed(playerName: string): number {
-    let matchesPlayed = 0;
-    
-    rounds.forEach(round => {
-      if (!round.submitted) return; // Only count submitted rounds
-      
-      round.matches.forEach(match => {
-        const { teamA, teamB } = match;
-        
-        if (teamA.includes(playerName) || teamB.includes(playerName)) {
-          matchesPlayed++;
-        }
-      });
-    });
-
-    return matchesPlayed;
   }
 
   function shuffle<T>(arr: T[]): T[] {
@@ -400,8 +418,14 @@ function TournamentApp({
     // Fair rotation: choose players with the lowest bye count; tie-break by lower totals (worse rank => earlier), then name.
     const sorted = [...ranking]
       .sort((a, b) => {
-        const bc = (byeCounts[a] ?? 0) - (byeCounts[b] ?? 0);
-        if (bc !== 0) return bc;
+        const matchesA = matchBalance.counts[a] ?? 0;
+        const matchesB = matchBalance.counts[b] ?? 0;
+        const matchDiff = matchesB - matchesA; // more matches => higher priority for bye
+        if (matchDiff !== 0) return matchDiff;
+
+        const byeDiff = (byeCounts[a] ?? 0) - (byeCounts[b] ?? 0);
+        if (byeDiff !== 0) return byeDiff;
+
         // worse rank means later in ranking array; we want those later first => sort by index descending
         const ia = ranking.indexOf(a);
         const ib = ranking.indexOf(b);
@@ -475,6 +499,16 @@ function TournamentApp({
 
   function addNextRound() {
     if (!ensureEvenAtLeastEight()) return;
+    if (rounds.length === 0) {
+      alert("Önce ilk turu başlatın.");
+      return;
+    }
+
+    const lastRound = rounds[rounds.length - 1];
+    if (!lastRound?.submitted) {
+      alert("Sonraki turu oluşturmadan önce mevcut turdaki tüm maçları tamamlayıp puanları kaydedin.");
+      return;
+    }
     const nextNo = rounds.length + 1;
     const ranking = currentRanking();
 
@@ -1048,7 +1082,12 @@ function TournamentApp({
                     Turu Kaydet / Puanları Dağıt
                   </button>
                 )}
-                {r.submitted && (
+                {!r.submitted && rIdx === rounds.length - 1 && (
+                  <span className="text-xs text-gray-500">
+                    ➡️ Bu turdaki tüm maçları kaydetmeden yeni eşleşmeler oluşturulamaz.
+                  </span>
+                )}
+                {r.submitted && rIdx === rounds.length - 1 && (
                   <button
                     onClick={addNextRound}
                     className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
@@ -1064,6 +1103,21 @@ function TournamentApp({
         {/* Standings */}
         <section className="bg-white rounded-2xl shadow p-4 mt-6">
           <h2 className="text-xl font-semibold mb-3">Güncel Sıralama</h2>
+          {!matchBalance.isBalanced && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+              <div className="font-semibold text-amber-800 mb-1">Maç dağılımı henüz dengede değil</div>
+              <div>
+                En yüksek maç sayısı {matchBalance.max} ({matchBalance.playersNeedingRest.join(" • ")}) ve en düşük {matchBalance.min}
+                {matchBalance.playersNeedingPlay.length ? ` (${matchBalance.playersNeedingPlay.join(" • ")})` : ""}.
+                Farkı kapatmak için sonraki turda daha az maç yapan oyunculara saha vermeyi unutmayın.
+              </div>
+            </div>
+          )}
+          {matchBalance.isBalanced && rounds.some((round) => round.submitted) && (
+            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+              <div className="font-semibold text-emerald-800">Tebrikler! Her oyuncu eşit sayıda maç oynadı.</div>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
@@ -1079,7 +1133,7 @@ function TournamentApp({
               <tbody>
                 {ranking.map((p, i) => {
                   const avg = calculateAverage(p);
-                  const matchesPlayed = calculateMatchesPlayed(p);
+                  const matchesPlayed = matchBalance.counts[p] ?? 0;
                   return (
                     <tr key={p} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-medium">{i + 1}</td>
