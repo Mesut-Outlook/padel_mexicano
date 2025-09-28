@@ -20,8 +20,8 @@ export default function App() {
   if (showJoinForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-          <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">
+        <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-md">
+          <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 text-gray-800">
             🏸 Mexicano Padel
           </h1>
           
@@ -46,14 +46,14 @@ export default function App() {
             {savedTournaments.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Önceki Turnuvalar
+                  📝 Önceki Turnuvalar
                 </label>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-32 overflow-y-auto">
                   {savedTournaments.map((tournament, index) => (
                     <button
                       key={index}
                       onClick={() => setTournamentId(tournament)}
-                      className="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm transition-colors"
+                      className="w-full text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm transition-colors break-words"
                     >
                       🏆 {tournament}
                     </button>
@@ -82,16 +82,16 @@ export default function App() {
             
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-2">Örnek ID'ler:</p>
-              <div className="space-x-2">
+              <div className="flex flex-wrap justify-center gap-2">
                 <button 
                   onClick={() => setTournamentId("demo-turnuva")}
-                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200"
+                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   demo-turnuva
                 </button>
                 <button 
                   onClick={() => setTournamentId("test-2024")}
-                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200"
+                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   test-2024
                 </button>
@@ -117,6 +117,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [totals, setTotals] = useState<Record<string, number>>({});
   const [byeCounts, setByeCounts] = useState<Record<string, number>>({});
+  const [courtCount, setCourtCount] = useState<number>(2); // Saha sayısı
 
   // Firebase'den gelen verileri local state'e senkronize et
   useEffect(() => {
@@ -125,6 +126,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       setRounds(tournamentData.rounds || []);
       setTotals(tournamentData.totals || {});
       setByeCounts(tournamentData.byeCounts || {});
+      setCourtCount(tournamentData.courtCount || 2);
     }
   }, [tournamentData]);
 
@@ -136,6 +138,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       rounds,
       totals,
       byeCounts,
+      courtCount,
       tournamentStarted: newPlayers.length > 0 && rounds.length > 0,
       currentRound: rounds.length
     };
@@ -294,13 +297,21 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     return a;
   }
 
-  function calculateOptimalRounds(playerCount: number) {
+  function calculateOptimalRounds(playerCount: number, courts: number = 2) {
     if (playerCount < 8 || playerCount % 2 !== 0) {
-      return { optimalRounds: 0, matchesPerPlayer: 0, description: "Geçersiz oyuncu sayısı" };
+      return { 
+        optimalRounds: 0, 
+        matchesPerPlayer: 0, 
+        description: "Geçersiz oyuncu sayısı",
+        timePerRound: 0,
+        totalTime: 0
+      };
     }
 
     const playingPerRound = Math.floor(playerCount / 4) * 4;
     const byesPerRound = playerCount - playingPerRound;
+    const matchesPerRound = playingPerRound / 4;
+    const timePerRound = Math.ceil(matchesPerRound / courts) * 20; // Her maç ~20dk
     
     let optimalRounds;
     if (byesPerRound === 0) {
@@ -310,13 +321,21 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     }
     
     const matchesPerPlayer = Math.floor((optimalRounds * 4) / playerCount);
+    const totalTime = optimalRounds * timePerRound;
     
-    let description = `${playerCount} oyuncu için optimal: ${optimalRounds} tur`;
+    let description = `${playerCount} oyuncu, ${courts} saha için optimal: ${optimalRounds} tur`;
     if (byesPerRound > 0) {
       description += ` (her turda ${byesPerRound} bay)`;
     }
     
-    return { optimalRounds, matchesPerPlayer, description };
+    return { 
+      optimalRounds, 
+      matchesPerPlayer, 
+      description, 
+      timePerRound, 
+      totalTime,
+      matchesPerRound
+    };
   }
 
   function ensureEvenAtLeastEight(): boolean {
@@ -595,6 +614,8 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
               <input
                 key={idx}
                 value={p}
+                aria-label={`Oyuncu ${idx + 1}`}
+                placeholder={`Oyuncu ${idx + 1}`}
                 onChange={(e) => {
                   const next = [...players];
                   const old = next[idx];
@@ -660,12 +681,30 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
             >
               Oyuncu Sil
             </button>
-            <div className="text-sm text-gray-600">Oyuncu sayısı: {players.length} (bu tur için gerekli bay: {byesNeededNow})</div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm text-gray-600">
+                🏟️ Saha Sayısı:
+                <select
+                  value={courtCount}
+                  onChange={(e) => setCourtCount(Number(e.target.value))}
+                  className="ml-2 border rounded-lg px-2 py-1 text-sm"
+                >
+                  <option value={1}>1 Saha</option>
+                  <option value={2}>2 Saha</option>
+                  <option value={3}>3 Saha</option>
+                  <option value={4}>4 Saha</option>
+                  <option value={5}>5 Saha</option>
+                </select>
+              </label>
+              <div className="text-sm text-gray-600">
+                Oyuncu sayısı: {players.length} | Bay: {byesNeededNow}
+              </div>
+            </div>
           </div>
 
           {/* Tur Hesaplama Bilgi Paneli */}
           {(() => {
-            const calc = calculateOptimalRounds(players.length);
+            const calc = calculateOptimalRounds(players.length, courtCount);
             const currentRounds = rounds.length;
             const progress = Math.min(100, (currentRounds / calc.optimalRounds) * 100);
             const remaining = Math.max(0, calc.optimalRounds - currentRounds);
@@ -675,7 +714,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                 <h3 className="text-lg font-semibold text-blue-800 mb-2">
                   🏆 Turnuva Planlama
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <div className="font-medium text-blue-700">Eşit Dağılım İçin</div>
                     <div className="text-lg font-bold text-blue-900">
@@ -695,17 +734,29 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                     </div>
                   </div>
                   <div>
+                    <div className="font-medium text-blue-700">Süre Tahmini</div>
+                    <div className="text-lg font-bold text-blue-900">
+                      {calc.timePerRound} dk/tur
+                    </div>
+                    <div className="text-blue-600">
+                      Toplam: ~{Math.floor(calc.totalTime / 60)}s {calc.totalTime % 60}dk
+                    </div>
+                  </div>
+                  <div>
                     <div className="font-medium text-blue-700">İlerleme</div>
                     <div className="w-full bg-blue-200 rounded-full h-3 mt-2">
                       <div 
                         className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                        style={{ width: `${progress}%` }}
+                        style={{width: `${Math.round(progress)}%`}}
                       ></div>
                     </div>
                     <div className="text-blue-800 font-medium mt-1">
                       %{Math.round(progress)}
                     </div>
                   </div>
+                </div>
+                <div className="mt-3 text-xs text-blue-600">
+                  💡 {calc.matchesPerRound} maç/tur × {courtCount} saha = {calc.timePerRound} dk (maç başına ~20dk)
                 </div>
               </div>
             );
@@ -759,6 +810,8 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                           min={0}
                           max={32}
                           value={m.scoreA ?? ""}
+                          aria-label="A takımı skoru"
+                          placeholder="0"
                           onChange={(e) => {
                             const value = Math.min(32, Math.max(0, Number(e.target.value)));
                             updateMatchScore(rIdx, mIdx, { scoreA: value });
@@ -773,6 +826,8 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                           min={0}
                           max={32}
                           value={m.scoreB ?? ""}
+                          aria-label="B takımı skoru"
+                          placeholder="0"
                           onChange={(e) => {
                             const value = Math.min(32, Math.max(0, Number(e.target.value)));
                             updateMatchScore(rIdx, mIdx, { scoreB: value });

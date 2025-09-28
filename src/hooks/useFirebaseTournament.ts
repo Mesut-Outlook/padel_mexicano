@@ -22,6 +22,7 @@ export interface TournamentData {
   rounds: Round[];
   totals: Record<string, number>;
   byeCounts: Record<string, number>;
+  courtCount?: number; // Saha sayısı
   tournamentStarted: boolean;
   currentRound: number;
 }
