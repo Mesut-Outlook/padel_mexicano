@@ -797,14 +797,46 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
 
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                 {r.matches.map((m, mIdx) => (
-                  <div key={mIdx} className="border rounded-xl p-3">
-                    <div className="font-medium">
-                      Maç {mIdx + 1}: {m.teamA[0]} & {m.teamA[1]} <span className="text-gray-400">vs</span> {m.teamB[0]} & {m.teamB[1]}
+                  <div key={mIdx} className="border-2 border-gray-200 rounded-2xl p-4 bg-gradient-to-br from-blue-50 via-white to-green-50 shadow-lg hover:shadow-xl transition-all duration-300">
+                    {/* Maç Başlığı */}
+                    <div className="text-center mb-4">
+                      <div className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg">
+                        🏸 Maç {mIdx + 1}
+                      </div>
+                    </div>
+                    
+                    {/* Takımlar Görünümü */}
+                    <div className="flex items-center justify-center mb-6">
+                      <div className="flex items-center bg-gradient-to-r from-blue-100 to-blue-200 px-4 py-3 rounded-xl shadow-md border-2 border-blue-300 min-w-0">
+                        <div className="text-center">
+                          <div className="text-blue-800 font-bold text-lg">{m.teamA[0]}</div>
+                          <div className="text-blue-600 text-sm font-medium">&</div>
+                          <div className="text-blue-800 font-bold text-lg">{m.teamA[1]}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="mx-4 flex-shrink-0">
+                        <div className="bg-gradient-to-r from-orange-400 via-red-500 to-pink-500 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg animate-pulse">
+                          VS
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center bg-gradient-to-r from-green-100 to-green-200 px-4 py-3 rounded-xl shadow-md border-2 border-green-300 min-w-0">
+                        <div className="text-center">
+                          <div className="text-green-800 font-bold text-lg">{m.teamB[0]}</div>
+                          <div className="text-green-600 text-sm font-medium">&</div>
+                          <div className="text-green-800 font-bold text-lg">{m.teamB[1]}</div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-sm text-gray-600">A Skoru (İlk 32'ye ulaşan kazanır)</label>
+                    {/* Skor Girişi */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="bg-white rounded-xl p-3 border-2 border-blue-200 shadow-sm">
+                        <label className="block text-sm font-semibold text-blue-700 mb-2">
+                          🔵 Takım A Skoru
+                          <span className="block text-xs text-gray-500 font-normal mt-1">İlk 32'ye ulaşan kazanır</span>
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -816,11 +848,14 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                             const value = Math.min(32, Math.max(0, Number(e.target.value)));
                             updateMatchScore(rIdx, mIdx, { scoreA: value });
                           }}
-                          className="w-full border rounded-xl px-3 py-2"
+                          className="w-full border-2 border-blue-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-blue-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
                         />
                       </div>
-                      <div>
-                        <label className="text-sm text-gray-600">B Skoru (İlk 32'ye ulaşan kazanır)</label>
+                      <div className="bg-white rounded-xl p-3 border-2 border-green-200 shadow-sm">
+                        <label className="block text-sm font-semibold text-green-700 mb-2">
+                          🟢 Takım B Skoru
+                          <span className="block text-xs text-gray-500 font-normal mt-1">İlk 32'ye ulaşan kazanır</span>
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -832,20 +867,46 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                             const value = Math.min(32, Math.max(0, Number(e.target.value)));
                             updateMatchScore(rIdx, mIdx, { scoreB: value });
                           }}
-                          className="w-full border rounded-xl px-3 py-2"
+                          className="w-full border-2 border-green-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-green-700 focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none"
                         />
                       </div>
                     </div>
 
+                    {/* Maç Sonucu Görünümü */}
+                    {m.scoreA !== undefined && m.scoreB !== undefined && (m.scoreA > 0 || m.scoreB > 0) && (
+                      <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-4 border-l-4 border-yellow-400 shadow-sm">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-gray-800 mb-2">
+                            {m.scoreA} - {m.scoreB}
+                          </div>
+                          {m.scoreA === 32 && (
+                            <div className="inline-flex items-center bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">
+                              🏆 Takım A Kazandı!
+                            </div>
+                          )}
+                          {m.scoreB === 32 && (
+                            <div className="inline-flex items-center bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-bold">
+                              🏆 Takım B Kazandı!
+                            </div>
+                          )}
+                          {m.scoreA < 32 && m.scoreB < 32 && (m.scoreA > 0 || m.scoreB > 0) && (
+                            <div className="text-gray-600 font-medium">
+                              Maç devam ediyor...
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
 
                     {m.perPlayerPoints && (
-                      <div className="mt-2 text-sm">
-                        <div className="text-gray-500">Dağıtılan Puanlar:</div>
-                        <div className="grid grid-cols-2 gap-1 mt-1">
+                      <div className="mt-4 bg-gray-50 rounded-xl p-3 border border-gray-200">
+                        <div className="text-sm font-semibold text-gray-700 mb-2">📋 Dağıtılan Puanlar:</div>
+                        <div className="grid grid-cols-2 gap-2">
                           {Object.entries(m.perPlayerPoints).map(([n, v]) => (
-                            <div key={n} className="flex justify-between">
-                              <span>{n}</span>
-                              <span className="font-semibold">{v}</span>
+                            <div key={n} className="flex justify-between items-center bg-white rounded-lg px-2 py-1 text-sm">
+                              <span className="font-medium text-gray-700">{n}</span>
+                              <span className="font-bold text-blue-600">{v}</span>
                             </div>
                           ))}
                         </div>
