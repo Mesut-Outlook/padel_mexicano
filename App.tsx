@@ -142,55 +142,36 @@ function TournamentApp({
     }
   }, [tournamentData]);
 
-  // State değişikliklerini localStorage'a kaydetmek için helper fonksiyonlar
-
-  const updateRoundsAndSave = (newRounds: Round[]) => {
-    setRounds(newRounds);
-    const newData = {
-      players,
-      rounds: newRounds, // Yeni rounds'ı kullan
-      totals,
-      byeCounts,
-      courtCount,
-      tournamentStarted: players.length > 0 && newRounds.length > 0,
-      currentRound: newRounds.length
-    };
-    updateTournament(newData);
+  type TournamentStatePatch = {
+    players?: string[];
+    rounds?: Round[];
+    totals?: Record<string, number>;
+    byeCounts?: Record<string, number>;
+    courtCount?: number;
   };
 
-  const updateTotalsAndSave = (newTotals: Record<string, number>) => {
-    console.log('🔥 updateTotalsAndSave çağrıldı:', {
-      newTotals,
-      currentTotals: totals,
-      players,
-      willSave: true
+  const persistTournamentState = (patch: TournamentStatePatch) => {
+    const nextPlayers = patch.players ?? players;
+    const nextRounds = patch.rounds ?? rounds;
+    const nextTotals = patch.totals ?? totals;
+    const nextByeCounts = patch.byeCounts ?? byeCounts;
+    const nextCourtCount = patch.courtCount ?? courtCount;
+
+    if (patch.players) setPlayers(nextPlayers);
+    if (patch.rounds) setRounds(nextRounds);
+    if (patch.totals) setTotals(nextTotals);
+    if (patch.byeCounts) setByeCounts(nextByeCounts);
+    if (patch.courtCount !== undefined) setCourtCount(nextCourtCount);
+
+    updateTournament({
+      players: nextPlayers,
+      rounds: nextRounds,
+      totals: nextTotals,
+      byeCounts: nextByeCounts,
+      courtCount: nextCourtCount,
+      tournamentStarted: nextPlayers.length > 0 && nextRounds.length > 0,
+      currentRound: nextRounds.length
     });
-    setTotals(newTotals);
-    const newData = {
-      players,
-      rounds,
-      totals: newTotals, // Yeni totals'ı kullan
-      byeCounts,
-      courtCount,
-      tournamentStarted: players.length > 0 && rounds.length > 0,
-      currentRound: rounds.length
-    };
-    console.log('💾 Firebase\'e kaydedilecek data:', newData);
-    updateTournament(newData);
-  };
-
-  const updateByeCountsAndSave = (newByeCounts: Record<string, number>) => {
-    setByeCounts(newByeCounts);
-    const newData = {
-      players,
-      rounds,
-      totals,
-      byeCounts: newByeCounts, // Yeni byeCounts'ı kullan
-      courtCount,
-      tournamentStarted: players.length > 0 && rounds.length > 0,
-      currentRound: rounds.length
-    };
-    updateTournament(newData);
   };
 
   // Fonksiyonları ve useMemo'yu da hooks bölümünde tanımla
@@ -413,8 +394,6 @@ function TournamentApp({
     if (!ensureEvenAtLeastEight()) return;
     const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
     const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
-    updateTotalsAndSave(initialTotals);
-    updateByeCountsAndSave(initialByes);
 
     // Round 1: random within playable set (apply byes if needed for N%4==2)
     const ranking0 = currentRanking();
@@ -441,7 +420,11 @@ function TournamentApp({
         byes,
       },
     ];
-    updateRoundsAndSave(newRounds);
+    persistTournamentState({
+      totals: initialTotals,
+      byeCounts: initialByes,
+      rounds: newRounds
+    });
   }
 
   function addNextRound() {
@@ -463,14 +446,17 @@ function TournamentApp({
       ...rounds,
       { number: nextNo, matches, rankingSnapshot: ranking, byes },
     ];
-    updateRoundsAndSave(newRounds);
+    const updatedByeCounts = (() => {
+      if (!byes.length) return byeCounts;
+      const next = { ...byeCounts } as Record<string, number>;
+      byes.forEach((p) => (next[p] = (next[p] ?? 0) + 1));
+      return next;
+    })();
 
-    // track byes
-    if (byes.length) {
-      const newByeCounts = { ...byeCounts };
-      byes.forEach((p) => (newByeCounts[p] = (newByeCounts[p] ?? 0) + 1));
-      updateByeCountsAndSave(newByeCounts);
-    }
+    persistTournamentState({
+      rounds: newRounds,
+      byeCounts: updatedByeCounts
+    });
   }
 
   function updateMatchScore(
@@ -497,7 +483,7 @@ function TournamentApp({
       copy.matches[matchIndex] = m;
       return copy;
     });
-    updateRoundsAndSave(newRounds);
+    persistTournamentState({ rounds: newRounds });
   }
 
   function submitRound(roundIndex: number) {
@@ -554,27 +540,25 @@ function TournamentApp({
     for (const [n, v] of Object.entries(perPlayerUpdates)) {
       newTotals[n] = (newTotals[n] ?? 0) + v;
     }
-    console.log('🔍 DEBUG - Puan güncellemesi:', {
-      perPlayerUpdates,
-      oldTotals: totals,
-      newTotals,
-      roundIndex,
-      matchCount: r.matches.length
-    });
-    updateTotalsAndSave(newTotals);
 
     const newRounds = [...rounds];
     newRounds[roundIndex] = { ...r, submitted: true };
-    updateRoundsAndSave(newRounds);
+
+    persistTournamentState({
+      totals: newTotals,
+      rounds: newRounds
+    });
   }
 
   function resetTournament() {
     const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
     const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
-    
-    updateRoundsAndSave([]);
-    updateTotalsAndSave(initialTotals);
-    updateByeCountsAndSave(initialByes);
+
+    persistTournamentState({
+      rounds: [],
+      totals: initialTotals,
+      byeCounts: initialByes
+    });
   }
 
   return (
@@ -663,17 +647,11 @@ function TournamentApp({
                   setByeCounts(newByeCounts);
                 }}
                 onBlur={() => {
-                  // Input'tan çıktığında Firebase'e kaydet
-                  const newData = {
+                  persistTournamentState({
                     players,
-                    rounds,
                     totals,
-                    byeCounts,
-                    courtCount,
-                    tournamentStarted: players.length > 0 && rounds.length > 0,
-                    currentRound: rounds.length
-                  };
-                  updateTournament(newData);
+                    byeCounts
+                  });
                 }}
                 className="border rounded-xl px-3 py-2 focus:outline-none focus:ring w-full"
               />
@@ -697,22 +675,11 @@ function TournamentApp({
                 const newTotals = { ...totals, [trimmedName]: 0 };
                 const newByeCounts = { ...byeCounts, [trimmedName]: 0 };
                 
-                // State'leri güncelle
-                setPlayers(newPlayers);
-                setTotals(newTotals);
-                setByeCounts(newByeCounts);
-                
-                // Firebase'e kaydet
-                const newData = {
+                persistTournamentState({
                   players: newPlayers,
-                  rounds,
                   totals: newTotals,
-                  byeCounts: newByeCounts,
-                  courtCount,
-                  tournamentStarted: newPlayers.length > 0 && rounds.length > 0,
-                  currentRound: rounds.length
-                };
-                updateTournament(newData);
+                  byeCounts: newByeCounts
+                });
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
             >
@@ -737,23 +704,12 @@ function TournamentApp({
                 const newPlayers = players.filter((p) => p !== trimmedName);
                 const { [trimmedName]: _, ...newTotals } = totals;
                 const { [trimmedName]: __, ...newByeCounts } = byeCounts;
-                
-                // State'leri güncelle
-                setPlayers(newPlayers);
-                setTotals(newTotals as Record<string, number>);
-                setByeCounts(newByeCounts as Record<string, number>);
-                
-                // Firebase'e kaydet
-                const newData = {
+
+                persistTournamentState({
                   players: newPlayers,
-                  rounds,
                   totals: newTotals as Record<string, number>,
-                  byeCounts: newByeCounts as Record<string, number>,
-                  courtCount,
-                  tournamentStarted: newPlayers.length > 0 && rounds.length > 0,
-                  currentRound: rounds.length
-                };
-                updateTournament(newData);
+                  byeCounts: newByeCounts as Record<string, number>
+                });
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
             >
