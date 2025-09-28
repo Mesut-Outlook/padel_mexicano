@@ -131,19 +131,6 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
   }, [tournamentData]);
 
   // State değişikliklerini localStorage'a kaydetmek için helper fonksiyonlar
-  const updatePlayersAndSave = (newPlayers: string[]) => {
-    setPlayers(newPlayers);
-    const newData = {
-      players: newPlayers,
-      rounds,
-      totals,
-      byeCounts,
-      courtCount,
-      tournamentStarted: newPlayers.length > 0 && rounds.length > 0,
-      currentRound: rounds.length
-    };
-    updateTournament(newData);
-  };
 
   const updateRoundsAndSave = (newRounds: Round[]) => {
     setRounds(newRounds);
@@ -625,19 +612,34 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                   const old = next[idx];
                   const val = e.target.value;
                   next[idx] = val;
-                  updatePlayersAndSave(next);
                   
-                  // Puanları da güncelle
+                  // Sadece state'i güncelle, Firebase kaydını onChange'de yapma
+                  // Çünkü her tuş basımında kaydetmek performans sorunu yaratır
+                  setPlayers(next);
+                  
+                  // Puanları ve bay sayılarını da güncelle
                   const newTotals = { ...totals };
                   newTotals[val] = newTotals[old] ?? 0;
-                  if (val !== old) delete newTotals[old];
-                  updateTotalsAndSave(newTotals);
+                  if (val !== old && old !== "") delete newTotals[old];
+                  setTotals(newTotals);
                   
-                  // Bay sayılarını da güncelle
                   const newByeCounts = { ...byeCounts };
                   newByeCounts[val] = newByeCounts[old] ?? 0;
-                  if (val !== old) delete newByeCounts[old];
-                  updateByeCountsAndSave(newByeCounts);
+                  if (val !== old && old !== "") delete newByeCounts[old];
+                  setByeCounts(newByeCounts);
+                }}
+                onBlur={() => {
+                  // Input'tan çıktığında Firebase'e kaydet
+                  const newData = {
+                    players,
+                    rounds,
+                    totals,
+                    byeCounts,
+                    courtCount,
+                    tournamentStarted: players.length > 0 && rounds.length > 0,
+                    currentRound: rounds.length
+                  };
+                  updateTournament(newData);
                 }}
                 className="border rounded-xl px-3 py-2 focus:outline-none focus:ring w-full"
               />
@@ -647,13 +649,36 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
             <button
               onClick={() => {
                 const name = prompt("Yeni oyuncu adı (oyuncu sayısı çift ve ≥8 olmalı)");
-                if (!name) return;
-                const next = [...players, name];
-                updatePlayersAndSave(next);
-                const newTotals = { ...totals, [name]: 0 };
-                updateTotalsAndSave(newTotals);
-                const newByeCounts = { ...byeCounts, [name]: 0 };
-                updateByeCountsAndSave(newByeCounts);
+                if (!name || name.trim() === "") return;
+                const trimmedName = name.trim();
+                
+                // Aynı isimde oyuncu var mı kontrol et
+                if (players.includes(trimmedName)) {
+                  alert("Bu isimde bir oyuncu zaten var!");
+                  return;
+                }
+                
+                // Tüm güncellemeleri tek seferde yap
+                const newPlayers = [...players, trimmedName];
+                const newTotals = { ...totals, [trimmedName]: 0 };
+                const newByeCounts = { ...byeCounts, [trimmedName]: 0 };
+                
+                // State'leri güncelle
+                setPlayers(newPlayers);
+                setTotals(newTotals);
+                setByeCounts(newByeCounts);
+                
+                // Firebase'e kaydet
+                const newData = {
+                  players: newPlayers,
+                  rounds,
+                  totals: newTotals,
+                  byeCounts: newByeCounts,
+                  courtCount,
+                  tournamentStarted: newPlayers.length > 0 && rounds.length > 0,
+                  currentRound: rounds.length
+                };
+                updateTournament(newData);
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
             >
@@ -666,17 +691,35 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                   return;
                 }
                 const name = prompt("Silinecek oyuncu adı");
-                if (!name) return;
-                if (!players.includes(name)) {
+                if (!name || name.trim() === "") return;
+                const trimmedName = name.trim();
+                
+                if (!players.includes(trimmedName)) {
                   alert("Bu isim mevcut değil.");
                   return;
                 }
-                const next = players.filter((p) => p !== name);
-                updatePlayersAndSave(next);
-                const { [name]: _, ...restTotals } = totals;
-                updateTotalsAndSave(restTotals as Record<string, number>);
-                const { [name]: __, ...restByes } = byeCounts;
-                updateByeCountsAndSave(restByes as Record<string, number>);
+                
+                // Tüm güncellemeleri tek seferde yap
+                const newPlayers = players.filter((p) => p !== trimmedName);
+                const { [trimmedName]: _, ...newTotals } = totals;
+                const { [trimmedName]: __, ...newByeCounts } = byeCounts;
+                
+                // State'leri güncelle
+                setPlayers(newPlayers);
+                setTotals(newTotals as Record<string, number>);
+                setByeCounts(newByeCounts as Record<string, number>);
+                
+                // Firebase'e kaydet
+                const newData = {
+                  players: newPlayers,
+                  rounds,
+                  totals: newTotals as Record<string, number>,
+                  byeCounts: newByeCounts as Record<string, number>,
+                  courtCount,
+                  tournamentStarted: newPlayers.length > 0 && rounds.length > 0,
+                  currentRound: rounds.length
+                };
+                updateTournament(newData);
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
             >
