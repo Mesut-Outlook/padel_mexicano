@@ -547,11 +547,9 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
         <header className="mb-6">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold">Mexicano Padel – Değişken Oyuncu Sayısı (≥8, çift)</h1>
+              <h1 className="text-3xl font-bold">🏸 Mexicano Padel</h1>
               <p className="text-sm text-gray-600 mt-1">
-                Tur 1 rastgele; sonraki turlar, o turun başındaki sıralamaya göre: kalan oyuncular (gerekli baylar çıkarıldıktan sonra) {" "}
-                <span className="font-semibold">(1&son) vs (2&son-1), (3&son-2) vs (4&son-3)</span> şeklinde eşleşir.
-                Maçlar <span className="font-semibold">32'ye kadar</span> oynanır; kazananın skoru 32 olmalıdır.
+                Adil ve dengeli bir turnuva sistemi. İlk tur rastgele, sonraki turlar sıralamaya göre eşleştirme.
               </p>
               <div className="flex items-center gap-4 mt-2">
                 <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
@@ -863,9 +861,46 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
           </div>
         </section>
 
-        <footer className="text-xs text-gray-500 mt-6">
-          Notlar: (1) Race-to-32: İlk 32 puana ulaşan takım kazanır (örn. 32-15, 32-20 vb. geçerlidir). (2) Her oyuncu kendi takımının aldığı skor sayısını puan olarak alır. (3) Averaj = Alınan Puan - Verilen Puan (pozitif iyi, negatif kötü). (4) Sıralama: Önce toplam puan, sonra averaj. (5) Oyuncu sayısı 4'ün katı değilse her turda gerekli sayıda bay otomatik atanır.
-        </footer>
+        {/* Kurallar Bölümü */}
+        <section className="bg-white rounded-2xl shadow p-6 mt-6">
+          <h2 className="text-xl font-semibold mb-4 text-blue-800">📋 Oyun Kuralları</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">🎯 Maç Formatı</h3>
+              <ul className="space-y-1 text-sm text-gray-600">
+                <li>• Maçlar <strong>32 puana kadar</strong> oynanır</li>
+                <li>• İlk 32'ye ulaşan takım kazanır</li>
+                <li>• Örnek skorlar: 32-15, 32-20, 32-8</li>
+                <li>• Her oyuncu takımının aldığı puanı alır</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">🏆 Tur Sistemi</h3>
+              <ul className="space-y-1 text-sm text-gray-600">
+                <li>• <strong>1. Tur:</strong> Rastgele eşleştirme</li>
+                <li>• <strong>Sonraki turlar:</strong> Sıralamaya göre</li>
+                <li>• En iyi + en kötü vs 2. + son 2.</li>
+                <li>• Minimum 8 oyuncu (çift sayı)</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">📊 Sıralama</h3>
+              <ul className="space-y-1 text-sm text-gray-600">
+                <li>• <strong>1. Kriter:</strong> Toplam puan</li>
+                <li>• <strong>2. Kriter:</strong> Averaj (alınan - verilen)</li>
+                <li>• <strong>3. Kriter:</strong> Alfabetik sıra</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">⏸️ Bay Sistemi</h3>
+              <ul className="space-y-1 text-sm text-gray-600">
+                <li>• Oyuncu sayısı 4'ün katı değilse bay verilir</li>
+                <li>• Bay sırası adil rotasyonla</li>
+                <li>• En az bay alan önceliklidir</li>
+              </ul>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );
