@@ -159,6 +159,12 @@ function TournamentApp({
   };
 
   const updateTotalsAndSave = (newTotals: Record<string, number>) => {
+    console.log('🔥 updateTotalsAndSave çağrıldı:', {
+      newTotals,
+      currentTotals: totals,
+      players,
+      willSave: true
+    });
     setTotals(newTotals);
     const newData = {
       players,
@@ -169,6 +175,7 @@ function TournamentApp({
       tournamentStarted: players.length > 0 && rounds.length > 0,
       currentRound: rounds.length
     };
+    console.log('💾 Firebase\'e kaydedilecek data:', newData);
     updateTournament(newData);
   };
 
@@ -547,6 +554,13 @@ function TournamentApp({
     for (const [n, v] of Object.entries(perPlayerUpdates)) {
       newTotals[n] = (newTotals[n] ?? 0) + v;
     }
+    console.log('🔍 DEBUG - Puan güncellemesi:', {
+      perPlayerUpdates,
+      oldTotals: totals,
+      newTotals,
+      roundIndex,
+      matchCount: r.matches.length
+    });
     updateTotalsAndSave(newTotals);
 
     const newRounds = [...rounds];
