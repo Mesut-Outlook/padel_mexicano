@@ -748,14 +748,39 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
 
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                 {r.matches.map((m, mIdx) => (
-                  <div key={mIdx} className="border rounded-xl p-3">
-                    <div className="font-medium">
-                      Maç {mIdx + 1}: {m.teamA[0]} & {m.teamA[1]} <span className="text-gray-400">vs</span> {m.teamB[0]} & {m.teamB[1]}
+                  <div key={mIdx} className="border rounded-xl p-4 bg-gradient-to-r from-blue-50 to-green-50">
+                    {/* Match Header */}
+                    <div className="text-center mb-4">
+                      <div className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold mb-2">
+                        🏸 Maç {mIdx + 1}
+                      </div>
+                    </div>
+                    
+                    {/* Teams Display */}
+                    <div className="flex items-center justify-center mb-4 text-lg">
+                      <div className="flex items-center bg-white px-4 py-2 rounded-xl shadow-sm border-2 border-blue-200">
+                        <span className="font-bold text-blue-700">{m.teamA[0]}</span>
+                        <span className="text-blue-500 mx-1">&</span>
+                        <span className="font-bold text-blue-700">{m.teamA[1]}</span>
+                      </div>
+                      
+                      <div className="mx-4 bg-gradient-to-r from-orange-400 to-red-400 text-white px-3 py-1 rounded-full font-bold text-sm shadow">
+                        VS
+                      </div>
+                      
+                      <div className="flex items-center bg-white px-4 py-2 rounded-xl shadow-sm border-2 border-green-200">
+                        <span className="font-bold text-green-700">{m.teamB[0]}</span>
+                        <span className="text-green-500 mx-1">&</span>
+                        <span className="font-bold text-green-700">{m.teamB[1]}</span>
+                      </div>
                     </div>
 
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-sm text-gray-600">A Skoru (İlk 32'ye ulaşan kazanır)</label>
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <div className="bg-white rounded-xl p-3 border-2 border-blue-200">
+                        <label className="block text-sm font-medium text-blue-700 mb-2">
+                          🔵 Takım A Skoru
+                          <span className="block text-xs text-gray-500 font-normal">İlk 32'ye ulaşan kazanır</span>
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -765,11 +790,15 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                             const value = Math.min(32, Math.max(0, Number(e.target.value)));
                             updateMatchScore(rIdx, mIdx, { scoreA: value });
                           }}
-                          className="w-full border rounded-xl px-3 py-2"
+                          className="w-full border-2 border-blue-300 rounded-xl px-3 py-3 text-center text-lg font-bold text-blue-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                          placeholder="0"
                         />
                       </div>
-                      <div>
-                        <label className="text-sm text-gray-600">B Skoru (İlk 32'ye ulaşan kazanır)</label>
+                      <div className="bg-white rounded-xl p-3 border-2 border-green-200">
+                        <label className="block text-sm font-medium text-green-700 mb-2">
+                          🟢 Takım B Skoru  
+                          <span className="block text-xs text-gray-500 font-normal">İlk 32'ye ulaşan kazanır</span>
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -779,10 +808,40 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                             const value = Math.min(32, Math.max(0, Number(e.target.value)));
                             updateMatchScore(rIdx, mIdx, { scoreB: value });
                           }}
-                          className="w-full border rounded-xl px-3 py-2"
+                          className="w-full border-2 border-green-300 rounded-xl px-3 py-3 text-center text-lg font-bold text-green-700 focus:border-green-500 focus:ring-2 focus:ring-green-200"
+                          placeholder="0"
                         />
                       </div>
                     </div>
+
+                    {/* Match Result Display */}
+                    {m.scoreA !== undefined && m.scoreB !== undefined && (
+                      <div className="mt-4 bg-white rounded-xl p-3 border-l-4 border-yellow-400">
+                        <div className="text-center">
+                          {m.scoreA === 32 || m.scoreB === 32 ? (
+                            <div className="flex items-center justify-center">
+                              <span className="text-2xl font-bold mr-2">
+                                {m.scoreA} - {m.scoreB}
+                              </span>
+                              {m.scoreA === 32 && (
+                                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-bold">
+                                  🏆 Takım A Kazandı!
+                                </span>
+                              )}
+                              {m.scoreB === 32 && (
+                                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-bold">
+                                  🏆 Takım B Kazandı!
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-gray-600">
+                              {m.scoreA} - {m.scoreB} (Devam ediyor...)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
 
                     {m.perPlayerPoints && (
