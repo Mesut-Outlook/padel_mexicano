@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useFirebaseTournament } from "./src/hooks/useFirebaseTournament";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
@@ -130,6 +130,8 @@ function TournamentApp({
   const [totals, setTotals] = useState<Record<string, number>>({});
   const [byeCounts, setByeCounts] = useState<Record<string, number>>({});
   const [courtCount, setCourtCount] = useState<number>(2); // Saha sayısı
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Firebase'den gelen verileri local state'e senkronize et
   useEffect(() => {
@@ -141,6 +143,14 @@ function TournamentApp({
       setCourtCount(tournamentData.courtCount || 2);
     }
   }, [tournamentData]);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeoutRef.current) {
+        clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   type TournamentStatePatch = {
     players?: string[];
@@ -174,6 +184,41 @@ function TournamentApp({
     });
   };
 
+  const queueCopyFeedbackReset = () => {
+    if (copyFeedbackTimeoutRef.current) {
+      clearTimeout(copyFeedbackTimeoutRef.current);
+    }
+    copyFeedbackTimeoutRef.current = setTimeout(() => setCopyStatus("idle"), 2000);
+  };
+
+  const handleCopyTournamentId = async () => {
+    if (!tournamentId) return;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(tournamentId);
+        setCopyStatus("copied");
+        queueCopyFeedbackReset();
+        return;
+      }
+      throw new Error("Clipboard API not supported");
+    } catch (clipboardError) {
+      try {
+        const fallbackPrompt = window.prompt("Turnuva ID'sini kopyalamak için metni seçin ve kopyalayın", tournamentId);
+        if (fallbackPrompt !== null) {
+          setCopyStatus("copied");
+        } else {
+          setCopyStatus("error");
+        }
+      } catch (promptError) {
+        console.error("Turnuva ID'si kopyalanamadı:", promptError || clipboardError);
+        setCopyStatus("error");
+      } finally {
+        queueCopyFeedbackReset();
+      }
+    }
+  };
+
   // Fonksiyonları ve useMemo'yu da hooks bölümünde tanımla
   function currentRanking(): string[] {
     // Best (highest total) first; break ties by average, then by name
@@ -193,6 +238,7 @@ function TournamentApp({
   }
 
   const ranking = useMemo(() => currentRanking(), [players, totals]);
+  const totalByeAssignments = useMemo(() => Object.values(byeCounts).reduce((sum, count) => sum + count, 0), [byeCounts]);
   const byesNeededNow = needByesForCount(players.length);
 
   if (loading) {
@@ -566,23 +612,66 @@ function TournamentApp({
       <div className="max-w-6xl mx-auto">
         <header className="mb-6">
           <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold">🏸 Mexicano Padel</h1>
+            <div className="flex-1">
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900">🏸 Mexicano Padel</h1>
               <p className="text-sm text-gray-600 mt-1">
                 Adil ve dengeli bir turnuva sistemi. İlk tur rastgele, sonraki turlar sıralamaya göre eşleştirme.
               </p>
-              <div className="flex items-center gap-4 mt-2">
-                <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                  🏆 Turnuva: {tournamentId}
+              <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-gray-600">
+                <span className="font-medium text-gray-700">
+                  {rounds.length > 0 ? `${rounds.length} tur tamamlandı` : "Turnuva başlamadı"}
                 </span>
-                <span className="text-sm text-gray-500">
-                  {rounds.length > 0 ? `${rounds.length} tur tamamlandı` : 'Turnuva başlamadı'}
-                </span>
+                <span className="hidden sm:inline text-gray-300">•</span>
+                <span>{players.length} oyuncu kayıtlı</span>
                 {error && (
-                  <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                  <span className="flex items-center gap-1 text-xs font-semibold bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
                     📱 Offline Mod
                   </span>
                 )}
+              </div>
+              <div className="mt-6">
+                <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 text-white rounded-3xl p-6 shadow-xl">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                    <div className="space-y-2">
+                      <span className="text-xs uppercase tracking-[0.35em] text-white/70">Aktif Turnuva</span>
+                      <div className="text-2xl md:text-4xl font-black leading-tight break-words">
+                        {tournamentId || "Turnuva ID'si seçilmedi"}
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-sm text-white/80">
+                        <div className="flex items-center gap-1">
+                          <span>👥</span>
+                          <span>{players.length} oyuncu</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>🌀</span>
+                          <span>{rounds.length} tur</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>⏸️</span>
+                          <span>{totalByeAssignments} bay hakkı</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                      <button
+                        onClick={handleCopyTournamentId}
+                        className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent"
+                      >
+                        📋 <span>ID'yi Kopyala</span>
+                      </button>
+                      {copyStatus === "copied" && (
+                        <span className="text-xs font-semibold rounded-full bg-emerald-400/25 text-white px-3 py-1">
+                          Kopyalandı!
+                        </span>
+                      )}
+                      {copyStatus === "error" && (
+                        <span className="text-xs font-semibold rounded-full bg-red-400/30 text-white px-3 py-1">
+                          Kopyalanamadı
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="flex gap-2">
