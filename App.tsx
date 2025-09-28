@@ -152,6 +152,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       rounds: newRounds,
       totals,
       byeCounts,
+      courtCount,
       tournamentStarted: players.length > 0 && newRounds.length > 0,
       currentRound: newRounds.length
     };
@@ -165,6 +166,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       rounds,
       totals: newTotals,
       byeCounts,
+      courtCount,
       tournamentStarted: players.length > 0 && rounds.length > 0,
       currentRound: rounds.length
     };
@@ -178,6 +180,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       rounds,
       totals,
       byeCounts: newByeCounts,
+      courtCount,
       tournamentStarted: players.length > 0 && rounds.length > 0,
       currentRound: rounds.length
     };
@@ -403,8 +406,9 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
   function startTournament() {
     if (!ensureEvenAtLeastEight()) return;
     const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
-    setTotals(initialTotals);
-    setByeCounts(Object.fromEntries(players.map((p) => [p, 0])));
+    const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
+    updateTotalsAndSave(initialTotals);
+    updateByeCountsAndSave(initialByes);
 
     // Round 1: random within playable set (apply byes if needed for N%4==2)
     const ranking0 = currentRanking();
@@ -621,20 +625,19 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                   const old = next[idx];
                   const val = e.target.value;
                   next[idx] = val;
-                  setPlayers(next);
-                  setTotals((prev) => {
-                    const copy = { ...prev } as Record<string, number>;
-                    // migrate score to new name
-                    copy[val] = copy[old] ?? 0;
-                    if (val !== old) delete copy[old];
-                    return copy;
-                  });
-                  setByeCounts((prev) => {
-                    const copy = { ...prev } as Record<string, number>;
-                    copy[val] = copy[old] ?? 0;
-                    if (val !== old) delete copy[old];
-                    return copy;
-                  });
+                  updatePlayersAndSave(next);
+                  
+                  // Puanları da güncelle
+                  const newTotals = { ...totals };
+                  newTotals[val] = newTotals[old] ?? 0;
+                  if (val !== old) delete newTotals[old];
+                  updateTotalsAndSave(newTotals);
+                  
+                  // Bay sayılarını da güncelle
+                  const newByeCounts = { ...byeCounts };
+                  newByeCounts[val] = newByeCounts[old] ?? 0;
+                  if (val !== old) delete newByeCounts[old];
+                  updateByeCountsAndSave(newByeCounts);
                 }}
                 className="border rounded-xl px-3 py-2 focus:outline-none focus:ring w-full"
               />
@@ -647,8 +650,10 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                 if (!name) return;
                 const next = [...players, name];
                 updatePlayersAndSave(next);
-                setTotals((prev) => ({ ...prev, [name]: 0 }));
-                setByeCounts((prev) => ({ ...prev, [name]: 0 }));
+                const newTotals = { ...totals, [name]: 0 };
+                updateTotalsAndSave(newTotals);
+                const newByeCounts = { ...byeCounts, [name]: 0 };
+                updateByeCountsAndSave(newByeCounts);
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
             >
@@ -668,14 +673,10 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
                 }
                 const next = players.filter((p) => p !== name);
                 updatePlayersAndSave(next);
-                setTotals((prev) => {
-                  const { [name]: _, ...rest } = prev;
-                  return rest as Record<string, number>;
-                });
-                setByeCounts((prev) => {
-                  const { [name]: _, ...rest } = prev;
-                  return rest as Record<string, number>;
-                });
+                const { [name]: _, ...restTotals } = totals;
+                updateTotalsAndSave(restTotals as Record<string, number>);
+                const { [name]: __, ...restByes } = byeCounts;
+                updateByeCountsAndSave(restByes as Record<string, number>);
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
             >
