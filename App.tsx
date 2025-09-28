@@ -126,17 +126,20 @@ function TournamentApp({
 
   // Tüm useState'leri en üstte tanımla - conditional render'dan önce!
   const [players, setPlayers] = useState<string[]>([]);
+  const [playerPool, setPlayerPool] = useState<string[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [totals, setTotals] = useState<Record<string, number>>({});
   const [byeCounts, setByeCounts] = useState<Record<string, number>>({});
   const [courtCount, setCourtCount] = useState<number>(2); // Saha sayısı
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toKey = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
 
   // Firebase'den gelen verileri local state'e senkronize et
   useEffect(() => {
     if (tournamentData) {
       setPlayers(tournamentData.players || []);
+      setPlayerPool(tournamentData.playerPool || []);
       setRounds(tournamentData.rounds || []);
       setTotals(tournamentData.totals || {});
       setByeCounts(tournamentData.byeCounts || {});
@@ -154,6 +157,7 @@ function TournamentApp({
 
   type TournamentStatePatch = {
     players?: string[];
+    playerPool?: string[];
     rounds?: Round[];
     totals?: Record<string, number>;
     byeCounts?: Record<string, number>;
@@ -162,12 +166,14 @@ function TournamentApp({
 
   const persistTournamentState = (patch: TournamentStatePatch) => {
     const nextPlayers = patch.players ?? players;
+    const nextPlayerPool = patch.playerPool ?? playerPool;
     const nextRounds = patch.rounds ?? rounds;
     const nextTotals = patch.totals ?? totals;
     const nextByeCounts = patch.byeCounts ?? byeCounts;
     const nextCourtCount = patch.courtCount ?? courtCount;
 
     if (patch.players) setPlayers(nextPlayers);
+    if (patch.playerPool) setPlayerPool(nextPlayerPool);
     if (patch.rounds) setRounds(nextRounds);
     if (patch.totals) setTotals(nextTotals);
     if (patch.byeCounts) setByeCounts(nextByeCounts);
@@ -175,6 +181,7 @@ function TournamentApp({
 
     updateTournament({
       players: nextPlayers,
+      playerPool: nextPlayerPool,
       rounds: nextRounds,
       totals: nextTotals,
       byeCounts: nextByeCounts,
@@ -434,6 +441,53 @@ function TournamentApp({
         return a.localeCompare(b, "tr");
       });
     return sorted.slice(0, count);
+  }
+
+  function handleAddPlayerFromPool(candidate: string) {
+    const name = candidate.trim();
+    if (!name) return;
+    if (players.some((p) => toKey(p) === toKey(name))) {
+      alert(`${name} zaten turnuvada.`);
+      return;
+    }
+
+    const newPlayers = [...players, name];
+    const newTotals = { ...totals, [name]: totals[name] ?? 0 };
+    const newByeCounts = { ...byeCounts, [name]: byeCounts[name] ?? 0 };
+    const newPool = playerPool.filter((p) => toKey(p) !== toKey(name));
+
+    persistTournamentState({
+      players: newPlayers,
+      totals: newTotals,
+      byeCounts: newByeCounts,
+      playerPool: newPool
+    });
+  }
+
+  function handleRemovePlayerFromPool(candidate: string) {
+    const name = candidate.trim();
+    if (!name) return;
+    const newPool = playerPool.filter((p) => toKey(p) !== toKey(name));
+    persistTournamentState({ playerPool: newPool });
+  }
+
+  function handleAddPlayerToPool() {
+    const name = prompt("Havuza eklenecek oyuncu adı");
+    if (!name) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    if (players.some((p) => toKey(p) === toKey(trimmedName))) {
+      alert("Bu oyuncu zaten turnuvada. Önce turnuvadan çıkarın.");
+      return;
+    }
+    if (playerPool.some((p) => toKey(p) === toKey(trimmedName))) {
+      alert("Bu oyuncu havuzda zaten var.");
+      return;
+    }
+
+    const newPool = [...playerPool, trimmedName].sort((a, b) => a.localeCompare(b, "tr"));
+    persistTournamentState({ playerPool: newPool });
   }
 
   function seededPairs(available: string[]): Array<[[string, string], [string, string]]> {
@@ -788,20 +842,27 @@ function TournamentApp({
                 const trimmedName = name.trim();
                 
                 // Aynı isimde oyuncu var mı kontrol et
-                if (players.includes(trimmedName)) {
+                const existsInPlayers = players.some((p) => toKey(p) === toKey(trimmedName));
+                if (existsInPlayers) {
                   alert("Bu isimde bir oyuncu zaten var!");
                   return;
                 }
+
+                const existsInPool = playerPool.some((p) => toKey(p) === toKey(trimmedName));
                 
                 // Tüm güncellemeleri tek seferde yap
                 const newPlayers = [...players, trimmedName];
                 const newTotals = { ...totals, [trimmedName]: 0 };
                 const newByeCounts = { ...byeCounts, [trimmedName]: 0 };
+                const newPool = existsInPool
+                  ? playerPool.filter((p) => toKey(p) !== toKey(trimmedName))
+                  : playerPool;
                 
                 persistTournamentState({
                   players: newPlayers,
                   totals: newTotals,
-                  byeCounts: newByeCounts
+                  byeCounts: newByeCounts,
+                  playerPool: newPool
                 });
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
@@ -817,21 +878,27 @@ function TournamentApp({
                 const name = prompt("Silinecek oyuncu adı");
                 if (!name || name.trim() === "") return;
                 const trimmedName = name.trim();
-                
-                if (!players.includes(trimmedName)) {
+                const targetPlayer = players.find((p) => toKey(p) === toKey(trimmedName));
+                if (!targetPlayer) {
                   alert("Bu isim mevcut değil.");
                   return;
                 }
                 
                 // Tüm güncellemeleri tek seferde yap
-                const newPlayers = players.filter((p) => p !== trimmedName);
-                const { [trimmedName]: _, ...newTotals } = totals;
-                const { [trimmedName]: __, ...newByeCounts } = byeCounts;
+                const newPlayers = players.filter((p) => toKey(p) !== toKey(trimmedName));
+                const { [targetPlayer]: _, ...newTotals } = totals;
+                const { [targetPlayer]: __, ...newByeCounts } = byeCounts;
+                const shouldReturnToPool = confirm(`${targetPlayer} havuza geri eklensin mi?`);
+                const filteredPool = playerPool.filter((p) => toKey(p) !== toKey(trimmedName));
+                const newPool = shouldReturnToPool
+                  ? [...filteredPool, targetPlayer].sort((a, b) => a.localeCompare(b, "tr"))
+                  : filteredPool;
 
                 persistTournamentState({
                   players: newPlayers,
                   totals: newTotals as Record<string, number>,
-                  byeCounts: newByeCounts as Record<string, number>
+                  byeCounts: newByeCounts as Record<string, number>,
+                  playerPool: newPool
                 });
               }}
               className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
@@ -856,6 +923,50 @@ function TournamentApp({
               <div className="text-sm text-gray-600">
                 Oyuncu sayısı: {players.length} | Bay: {byesNeededNow}
               </div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-gray-800">Oyuncu Havuzu</h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleAddPlayerToPool}
+                  className="px-3 py-2 rounded-xl bg-blue-100 text-blue-700 text-sm hover:bg-blue-200"
+                >
+                  + Havuza Oyuncu Ekle
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Havuzdaki oyuncuları tek tıkla turnuvaya ekleyebilir veya listeden kaldırabilirsiniz.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              {playerPool.length === 0 && (
+                <span className="text-sm text-gray-500">Havuz boş. Yeni oyuncular ekleyebilirsiniz.</span>
+              )}
+              {playerPool.map((name) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3 py-2 shadow-sm border border-gray-200"
+                >
+                  <span className="text-sm font-medium text-gray-700">{name}</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleAddPlayerFromPool(name)}
+                      className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-200"
+                    >
+                      Oyuna Al
+                    </button>
+                    <button
+                      onClick={() => handleRemovePlayerFromPool(name)}
+                      className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-lg hover:bg-red-200"
+                    >
+                      Sil
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

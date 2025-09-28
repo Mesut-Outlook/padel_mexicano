@@ -2,6 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ref, onValue, set, remove } from 'firebase/database';
 import { database } from '../firebase';
 
+const DEFAULT_PLAYER_POOL = [
+  'Mesut',
+  'Mumtaz',
+  'Berk',
+  'Erdem',
+  'Hulusi',
+  'Emre',
+  'Ahmet',
+  'Batuhan',
+  'Sercan',
+  'Okan',
+  'Deniz',
+  'Sezgin'
+];
+
 export interface Match {
   teamA: [string, string];
   teamB: [string, string];
@@ -27,6 +42,7 @@ export interface TournamentData {
   courtCount?: number; // Saha sayısı
   tournamentStarted: boolean;
   currentRound: number;
+  playerPool: string[];
 }
 
 export function useFirebaseTournament(tournamentId: string) {
@@ -44,18 +60,39 @@ export function useFirebaseTournament(tournamentId: string) {
     byeCounts: {},
     courtCount: 2,
     tournamentStarted: false,
-    currentRound: 0
+    currentRound: 0,
+    playerPool: [...DEFAULT_PLAYER_POOL]
   }), []);
 
-  const normalizeTournamentData = useCallback((raw: Partial<TournamentData> | null | undefined): TournamentData => ({
-    players: raw?.players ?? [],
-    rounds: raw?.rounds ?? [],
-    totals: raw?.totals ?? {},
-    byeCounts: raw?.byeCounts ?? {},
-    courtCount: raw?.courtCount ?? 2,
-    tournamentStarted: raw?.tournamentStarted ?? false,
-    currentRound: raw?.currentRound ?? 0
-  }), []);
+  const normalizeTournamentData = useCallback((raw: Partial<TournamentData> | null | undefined): TournamentData => {
+    const sanitizedPlayers = Array.isArray(raw?.players)
+      ? raw!.players.filter((name): name is string => typeof name === 'string' && name.trim().length > 0).map((name) => name.trim())
+      : [];
+
+    const initialPool = Array.isArray(raw?.playerPool) && raw?.playerPool?.length
+      ? raw.playerPool
+      : DEFAULT_PLAYER_POOL;
+
+    const sanitizedPool = Array.from(
+      new Set(
+        initialPool
+          .filter((name): name is string => typeof name === 'string')
+          .map((name) => name.trim())
+          .filter((name) => name.length > 0 && !sanitizedPlayers.includes(name))
+      )
+    );
+
+    return {
+      players: sanitizedPlayers,
+      rounds: Array.isArray(raw?.rounds) ? raw!.rounds : [],
+      totals: raw?.totals ?? {},
+      byeCounts: raw?.byeCounts ?? {},
+      courtCount: raw?.courtCount ?? 2,
+      tournamentStarted: raw?.tournamentStarted ?? false,
+      currentRound: raw?.currentRound ?? 0,
+      playerPool: sanitizedPool
+    };
+  }, []);
 
   useEffect(() => {
     if (!tournamentId) {
