@@ -103,12 +103,24 @@ export default function App() {
     );
   }
 
-  return <TournamentApp tournamentId={tournamentId} setShowJoinForm={setShowJoinForm} />;
+  return <TournamentApp 
+    tournamentId={tournamentId} 
+    setShowJoinForm={setShowJoinForm}
+    savedTournaments={savedTournaments}
+    setSavedTournaments={setSavedTournaments}
+  />;
 }
 
-function TournamentApp({ tournamentId, setShowJoinForm }: { 
+function TournamentApp({ 
+  tournamentId, 
+  setShowJoinForm, 
+  savedTournaments, 
+  setSavedTournaments 
+}: { 
   tournamentId: string; 
-  setShowJoinForm: (show: boolean) => void; 
+  setShowJoinForm: (show: boolean) => void;
+  savedTournaments: string[];
+  setSavedTournaments: (tournaments: string[]) => void;
 }) {
   const { data: tournamentData, loading, error, updateTournament, deleteTournament } = useFirebaseTournament(tournamentId);
 
@@ -136,7 +148,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     setRounds(newRounds);
     const newData = {
       players,
-      rounds: newRounds,
+      rounds: newRounds, // Yeni rounds'ı kullan
       totals,
       byeCounts,
       courtCount,
@@ -151,7 +163,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
     const newData = {
       players,
       rounds,
-      totals: newTotals,
+      totals: newTotals, // Yeni totals'ı kullan
       byeCounts,
       courtCount,
       tournamentStarted: players.length > 0 && rounds.length > 0,
@@ -166,7 +178,7 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
       players,
       rounds,
       totals,
-      byeCounts: newByeCounts,
+      byeCounts: newByeCounts, // Yeni byeCounts'ı kullan
       courtCount,
       tournamentStarted: players.length > 0 && rounds.length > 0,
       currentRound: rounds.length
@@ -579,7 +591,15 @@ function TournamentApp({ tournamentId, setShowJoinForm }: {
               <button
                 onClick={() => {
                   if (confirm('Bu turnuvayı tamamen silmek istediğinizden emin misiniz? Tüm veriler kaybolacak!')) {
+                    // Firebase'den sil
                     deleteTournament();
+                    
+                    // localStorage'daki kayitli turnuvalar listesinden de kaldir
+                    const updatedTournaments = savedTournaments.filter(t => t !== tournamentId);
+                    setSavedTournaments(updatedTournaments);
+                    localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
+                    
+                    // Ana ekrana dön
                     setShowJoinForm(true);
                   }
                 }}
