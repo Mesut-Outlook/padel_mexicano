@@ -17,6 +17,19 @@ export default function App() {
   });
 
   // Turnuva ID'si yoksa giriş formu göster
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  useEffect(() => {
+    let timeout: any;
+    if (joinLoading) {
+      timeout = setTimeout(() => {
+        setJoinLoading(false);
+        setJoinError("Turnuva verisi yüklenemedi. Lütfen internet bağlantınızı ve turnuva ID'sini kontrol edin.");
+      }, 12000);
+    }
+    return () => clearTimeout(timeout);
+  }, [joinLoading]);
+
   if (showJoinForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
@@ -24,7 +37,6 @@ export default function App() {
           <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 text-gray-800">
             🏸 Mexicano Padel
           </h1>
-          
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -61,25 +73,43 @@ export default function App() {
                 </div>
               </div>
             )}
-            
+
             <button
               onClick={() => {
-                if (tournamentId.trim()) {
-                  // Turnuva ID'sini kayıtlı listesine ekle
-                  const updatedTournaments = [tournamentId, ...savedTournaments.filter(t => t !== tournamentId)].slice(0, 5);
+                const normalizedId = tournamentId.trim();
+                if (normalizedId) {
+                  setJoinLoading(true);
+                  setJoinError(null);
+                  if (normalizedId !== tournamentId) {
+                    setTournamentId(normalizedId);
+                  }
+                  const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 5);
                   setSavedTournaments(updatedTournaments);
                   localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
                   setShowJoinForm(false);
+                  setJoinLoading(false);
                 } else {
                   alert("Lütfen bir turnuva ID'si girin");
                 }
               }}
-              disabled={!tournamentId.trim()}
+              disabled={!tournamentId.trim() || joinLoading}
               className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl font-medium hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
             >
-              Turnuvayı Başlat / Katıl
+              {joinLoading ? "Katılıyor..." : "Turnuvayı Başlat / Katıl"}
             </button>
-            
+
+            {joinLoading && (
+              <div className="flex items-center justify-center mt-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+                <span className="text-blue-600 font-medium">Turnuva yükleniyor...</span>
+              </div>
+            )}
+            {joinError && (
+              <div className="mt-4 text-red-600 text-sm font-semibold text-center">
+                {joinError}
+              </div>
+            )}
+
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-2">Örnek ID'ler:</p>
               <div className="flex flex-wrap justify-center gap-2">
@@ -135,17 +165,28 @@ function TournamentApp({
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toKey = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
 
+  // Fallback to empty data if no tournamentData but not loading
+  const safeData = tournamentData || {
+    players: [],
+    rounds: [],
+    totals: {},
+    byeCounts: {},
+    courtCount: 2,
+    tournamentStarted: false,
+    currentRound: 0,
+    playerPool: []
+  };
+
   // Firebase'den gelen verileri local state'e senkronize et
   useEffect(() => {
-    if (tournamentData) {
-      setPlayers(tournamentData.players || []);
-      setPlayerPool(tournamentData.playerPool || []);
-      setRounds(tournamentData.rounds || []);
-      setTotals(tournamentData.totals || {});
-      setByeCounts(tournamentData.byeCounts || {});
-      setCourtCount(tournamentData.courtCount || 2);
-    }
-  }, [tournamentData]);
+    const data = safeData;
+    setPlayers(data.players || []);
+    setPlayerPool(data.playerPool || []);
+    setRounds(data.rounds || []);
+    setTotals(data.totals || {});
+    setByeCounts(data.byeCounts || {});
+    setCourtCount(data.courtCount || 2);
+  }, [tournamentData]); // Keep dependency on tournamentData
 
   useEffect(() => {
     return () => {
@@ -300,10 +341,13 @@ function TournamentApp({
     console.warn('Firebase offline, local modda çalışıyor:', error);
   }
 
-  if (!tournamentData) {
+  if (!tournamentData && loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
-        <p className="text-gray-600">Turnuva verisi yükleniyor...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Turnuva verisi yükleniyor...</p>
+        </div>
       </div>
     );
   }

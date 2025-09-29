@@ -103,18 +103,39 @@ export function useFirebaseTournament(tournamentId: string) {
 
     const storageKey = getTournamentStorageKey(tournamentId);
     const savedDataRaw = localStorage.getItem(storageKey);
+    let hasInitialData = false;
+
     if (savedDataRaw) {
       try {
         const savedData = JSON.parse(savedDataRaw);
         setData(normalizeTournamentData(savedData));
+        setLoading(false);
+        hasInitialData = true;
       } catch (parseError) {
         console.warn('Yerel turnuva verisi çözümlenemedi, varsayılan değer kullanılacak.', parseError);
-        setData(getDefaultTournamentData());
       }
     }
 
-    setLoading(true);
+    if (!hasInitialData) {
+      const defaultData = getDefaultTournamentData();
+      setData(defaultData);
+      setLoading(false);
+      localStorage.setItem(storageKey, JSON.stringify(defaultData));
+    }
+
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!navigator.onLine || !hasInitialData) {
+      fallbackTimer = setTimeout(() => {
+        setError('Firebase yanıt vermiyor. Yerel veri ile devam ediliyor.');
+        setLoading(false);
+      }, 8000);
+    }
+
     const unsubscribe = onValue(tournamentRef, (snapshot) => {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
       if (snapshot.exists()) {
         const remoteData = normalizeTournamentData(snapshot.val());
         setData(remoteData);
@@ -127,12 +148,19 @@ export function useFirebaseTournament(tournamentId: string) {
       }
       setLoading(false);
     }, (err) => {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
       console.error('Firebase turnuva verisine erişilemedi:', err);
       setError('Turnuva verisine ulaşılamadı. Yerel veri kullanılacak.');
       setLoading(false);
     });
 
     return () => {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+      }
       unsubscribe();
     };
   }, [tournamentId, tournamentRef, getDefaultTournamentData, getTournamentStorageKey, normalizeTournamentData]);
