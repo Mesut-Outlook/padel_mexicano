@@ -205,7 +205,7 @@ function TournamentApp({
     courtCount?: number;
   };
 
-  const persistTournamentState = (patch: TournamentStatePatch) => {
+  const persistTournamentState = async (patch: TournamentStatePatch) => {
     const nextPlayers = patch.players ?? players;
     const nextPlayerPool = patch.playerPool ?? playerPool;
     const nextRounds = patch.rounds ?? rounds;
@@ -575,8 +575,10 @@ function TournamentApp({
     return { [p1]: teamScore, [p2]: teamScore };
   }
 
-  function startTournament() {
+  async function startTournament() {
+    console.log("startTournament called");
     const validation = ensureEvenAtLeastEight();
+    console.log("validation result:", validation);
     if (validation === false) return;
     
     let currentPlayers = [...players];
@@ -593,7 +595,7 @@ function TournamentApp({
       const newTotals = Object.fromEntries(currentPlayers.map((p) => [p, 0]));
       const newByeCounts = Object.fromEntries(currentPlayers.map((p) => [p, 0]));
       
-      persistTournamentState({
+      await persistTournamentState({
         players: currentPlayers,
         playerPool: currentPool,
         totals: newTotals,
@@ -633,7 +635,7 @@ function TournamentApp({
         byes,
       },
     ];
-    persistTournamentState({
+    await persistTournamentState({
       players: currentPlayers,
       playerPool: currentPool,
       totals: initialTotals,
