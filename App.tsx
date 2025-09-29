@@ -443,13 +443,30 @@ function TournamentApp({
     };
   }
 
-  function ensureEvenAtLeastEight(): boolean {
+  function ensureEvenAtLeastEight(): boolean | "auto-add" {
     if (players.length < 8) {
-      alert("Oyuncu sayısı en az 8 olmalı.");
+      const availableInPool = playerPool.length;
+      const needed = 8 - players.length;
+      if (availableInPool >= needed) {
+        const confirm = window.confirm(
+          `Turnuva başlatmak için en az 8 oyuncu gerekli. Şu an ${players.length} oyuncu var.\n\n` +
+          `Havuzdan ${needed} oyuncu daha eklensin mi? (Toplam: ${availableInPool} oyuncu mevcut)`
+        );
+        if (confirm) {
+          return "auto-add";
+        }
+      } else {
+        alert(
+          `Turnuva başlatmak için en az 8 oyuncu gerekli.\n\n` +
+          `Şu an: ${players.length} oyuncu\n` +
+          `Havuzda: ${availableInPool} oyuncu\n` +
+          `Eksik: ${needed - availableInPool} oyuncu daha eklemelisiniz.`
+        );
+      }
       return false;
     }
     if (players.length % 2 !== 0) {
-      alert("Oyuncu sayısı çift olmalı (8, 10, 12, ...).");
+      alert("Oyuncu sayısı çift olmalı (8, 10, 12, ...). Bir oyuncu daha ekleyin veya bir oyuncu çıkarın.");
       return false;
     }
     return true;
@@ -559,19 +576,47 @@ function TournamentApp({
   }
 
   function startTournament() {
-    if (!ensureEvenAtLeastEight()) return;
-    const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
-    const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
+    const validation = ensureEvenAtLeastEight();
+    if (validation === false) return;
+    
+    let currentPlayers = [...players];
+    let currentPool = [...playerPool];
+    
+    // Auto-add players from pool if requested
+    if (validation === "auto-add") {
+      const needed = 8 - currentPlayers.length;
+      const toAdd = currentPool.slice(0, needed);
+      currentPlayers = [...currentPlayers, ...toAdd];
+      currentPool = currentPool.slice(needed);
+      
+      // Update state immediately
+      const newTotals = Object.fromEntries(currentPlayers.map((p) => [p, 0]));
+      const newByeCounts = Object.fromEntries(currentPlayers.map((p) => [p, 0]));
+      
+      persistTournamentState({
+        players: currentPlayers,
+        playerPool: currentPool,
+        totals: newTotals,
+        byeCounts: newByeCounts
+      });
+    }
+    
+    const initialTotals = Object.fromEntries(currentPlayers.map((p) => [p, 0]));
+    const initialByes = Object.fromEntries(currentPlayers.map((p) => [p, 0]));
 
     // Round 1: random within playable set (apply byes if needed for N%4==2)
-    const ranking0 = currentRanking();
-    const n = players.length;
+    const ranking0 = currentPlayers.sort((a, b) => {
+      const totalDiff = (initialTotals[b] ?? 0) - (initialTotals[a] ?? 0);
+      if (totalDiff !== 0) return totalDiff;
+      return a.localeCompare(b, "tr");
+    });
+    const n = currentPlayers.length;
     const byesNeeded = needByesForCount(n);
     let byes: string[] = [];
     if (byesNeeded > 0) {
       byes = pickByes(ranking0, byesNeeded);
     }
-    const active = shuffle(players.filter((p) => !byes.includes(p)));
+    const active = shuffle(currentPlayers.filter((p) => !byes.includes(p)));
     const teams: [string, string][] = [];
     for (let i = 0; i < active.length; i += 2) {
       teams.push([active[i], active[i + 1]]);
@@ -589,6 +634,8 @@ function TournamentApp({
       },
     ];
     persistTournamentState({
+      players: currentPlayers,
+      playerPool: currentPool,
       totals: initialTotals,
       byeCounts: initialByes,
       rounds: newRounds
