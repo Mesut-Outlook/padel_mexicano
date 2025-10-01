@@ -1,0 +1,106 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tournament {
+  id              String   @id @default(cuid())
+  tournamentId    String   @unique // Firebase'deki tournamentId
+  courtCount      Int      @default(2)
+  tournamentStarted Boolean @default(false)
+  currentRound    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  players         TournamentPlayer[]
+  rounds          Round[]
+  playerPool      Player[]
+
+  @@map("tournaments")
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  // Relations
+  tournaments TournamentPlayer[]
+  poolTournaments Tournament[]
+  matches     PlayerMatch[]
+
+  @@unique([name])
+  @@map("players")
+}
+
+model TournamentPlayer {
+  id           String @id @default(cuid())
+  tournamentId String
+  playerId     String
+  totalPoints  Int    @default(0)
+  byeCount     Int    @default(0)
+
+  // Relations
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player       Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@map("tournament_players")
+}
+
+model Round {
+  id           String   @id @default(cuid())
+  number       Int
+  rankingSnapshot String[] // JSON array olarak saklanacak
+  byes         String[] // JSON array olarak saklanacak
+  submitted    Boolean  @default(false)
+  tournamentId String
+  createdAt    DateTime @default(now())
+
+  // Relations
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches      Match[]
+
+  @@unique([tournamentId, number])
+  @@map("rounds")
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  roundId   String
+  teamA     String[] // JSON array: [player1, player2]
+  teamB     String[] // JSON array: [player1, player2]
+  scoreA    Int?
+  scoreB    Int?
+  winner    String?  // "A" or "B"
+  createdAt DateTime @default(now())
+
+  // Relations
+  round     Round       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  players   PlayerMatch[]
+
+  @@map("matches")
+}
+
+model PlayerMatch {
+  id        String  @id @default(cuid())
+  matchId   String
+  playerId  String
+  points    Int     @default(0)
+
+  // Relations
+  match     Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player    Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@map("player_matches")
+}

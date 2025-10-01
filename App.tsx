@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useFirebaseTournament } from "./src/hooks/useFirebaseTournament";
+import { usePrismaTournament } from "./src/hooks/usePrismaTournament";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
 // After removing required BYEs to make players divisible by 4, pair as:
@@ -152,7 +152,7 @@ function TournamentApp({
   savedTournaments: string[];
   setSavedTournaments: (tournaments: string[]) => void;
 }) {
-  const { data: tournamentData, loading, error, updateTournament, deleteTournament } = useFirebaseTournament(tournamentId);
+  const { data: tournamentData, loading, error, updateTournament, deleteTournament } = usePrismaTournament(tournamentId);
 
   // Tüm useState'leri en üstte tanımla - conditional render'dan önce!
   const [players, setPlayers] = useState<string[]>([]);
