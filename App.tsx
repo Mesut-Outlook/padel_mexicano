@@ -1206,8 +1206,25 @@ function TournamentApp({
                           aria-label="A takımı skoru"
                           placeholder="0"
                           onChange={(e) => {
-                            const value = Math.min(32, Math.max(0, Number(e.target.value)));
-                            updateMatchScore(rIdx, mIdx, { scoreA: value });
+                            const inputValue = e.target.value;
+                            // Boş string'i de allow et, sadece number'a dönüştürülen değeri kontrol et
+                            if (inputValue === "") {
+                              updateMatchScore(rIdx, mIdx, { scoreA: undefined });
+                            } else {
+                              const value = Math.min(32, Math.max(0, Number(inputValue)));
+                              // NaN kontrolü ekle
+                              if (!isNaN(value)) {
+                                updateMatchScore(rIdx, mIdx, { scoreA: value });
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            // Blur'da değeri korunmasını sağla
+                            const inputValue = e.target.value;
+                            if (inputValue !== "" && !isNaN(Number(inputValue))) {
+                              const value = Math.min(32, Math.max(0, Number(inputValue)));
+                              updateMatchScore(rIdx, mIdx, { scoreA: value });
+                            }
                           }}
                           className="w-full border-2 border-blue-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-blue-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
                         />
@@ -1225,8 +1242,25 @@ function TournamentApp({
                           aria-label="B takımı skoru"
                           placeholder="0"
                           onChange={(e) => {
-                            const value = Math.min(32, Math.max(0, Number(e.target.value)));
-                            updateMatchScore(rIdx, mIdx, { scoreB: value });
+                            const inputValue = e.target.value;
+                            // Boş string'i de allow et, sadece number'a dönüştürülen değeri kontrol et
+                            if (inputValue === "") {
+                              updateMatchScore(rIdx, mIdx, { scoreB: undefined });
+                            } else {
+                              const value = Math.min(32, Math.max(0, Number(inputValue)));
+                              // NaN kontrolü ekle
+                              if (!isNaN(value)) {
+                                updateMatchScore(rIdx, mIdx, { scoreB: value });
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            // Blur'da değeri korunmasını sağla
+                            const inputValue = e.target.value;
+                            if (inputValue !== "" && !isNaN(Number(inputValue))) {
+                              const value = Math.min(32, Math.max(0, Number(inputValue)));
+                              updateMatchScore(rIdx, mIdx, { scoreB: value });
+                            }
                           }}
                           className="w-full border-2 border-green-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-green-700 focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none"
                         />
