@@ -44,7 +44,9 @@ export interface TournamentData {
 }
 
 // API base URL - development için localhost, production için gerçek URL
-const API_BASE_URL = 'http://localhost:3001';
+const API_BASE_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+  ? 'http://localhost:3001' 
+  : '';
 
 export function usePrismaTournament(tournamentId: string) {
   const [data, setData] = useState<TournamentData | null>(null);
