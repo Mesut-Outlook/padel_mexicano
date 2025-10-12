@@ -1,5 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { usePrismaTournament } from "./src/hooks/usePrismaTournament";
+import { useAuth } from "./src/hooks/useAuth";
+import { LoginForm } from "./src/components/LoginForm";
+import { TournamentJoinForm } from "./src/components/TournamentJoinForm";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
 // After removing required BYEs to make players divisible by 4, pair as:
@@ -8,6 +11,7 @@ import { usePrismaTournament } from "./src/hooks/usePrismaTournament";
 // Points split within each team using the round's starting ranking snapshot: 55% to lower-ranked, 45% to higher-ranked.
 
 export default function App() {
+  const { user, logout, isAdmin } = useAuth();
   const [tournamentId, setTournamentId] = useState<string>("");
   const [showJoinForm, setShowJoinForm] = useState(true);
   const [savedTournaments, setSavedTournaments] = useState<string[]>(() => {
@@ -16,143 +20,56 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Turnuva ID'si yoksa giriş formu göster
-  const [joinLoading, setJoinLoading] = useState(false);
-  const [joinError, setJoinError] = useState<string | null>(null);
-  useEffect(() => {
-    let timeout: any;
-    if (joinLoading) {
-      timeout = setTimeout(() => {
-        setJoinLoading(false);
-        setJoinError("Turnuva verisi yüklenemedi. Lütfen internet bağlantınızı ve turnuva ID'sini kontrol edin.");
-      }, 12000);
-    }
-    return () => clearTimeout(timeout);
-  }, [joinLoading]);
+  // Kullanıcı giriş yapmadıysa login formu göster
+  if (!user) {
+    return <LoginForm />;
+  }
 
+  // Turnuva seçilmediyse join formu göster
   if (showJoinForm) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-md">
-          <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 text-gray-800">
-            🏸 Mexicano Padel
-          </h1>
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Turnuva ID'si
-              </label>
-              <input
-                type="text"
-                placeholder="turnuva-ismi-2024"
-                value={tournamentId}
-                onChange={(e) => setTournamentId(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                Aynı turnuvaya katılacak herkes aynı ID'yi kullanmalı.<br/>
-                <span className="text-blue-600 font-medium">Turnuva yoksa otomatik oluşturulur.</span>
-              </p>
-            </div>
-
-            {savedTournaments.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📝 Önceki Turnuvalar
-                </label>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {savedTournaments.map((tournament, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setTournamentId(tournament)}
-                      className="w-full text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm transition-colors break-words"
-                    >
-                      🏆 {tournament}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => {
-                const normalizedId = tournamentId.trim();
-                if (normalizedId) {
-                  setJoinLoading(true);
-                  setJoinError(null);
-                  if (normalizedId !== tournamentId) {
-                    setTournamentId(normalizedId);
-                  }
-                  const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 5);
-                  setSavedTournaments(updatedTournaments);
-                  localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
-                  setShowJoinForm(false);
-                  setJoinLoading(false);
-                } else {
-                  alert("Lütfen bir turnuva ID'si girin");
-                }
-              }}
-              disabled={!tournamentId.trim() || joinLoading}
-              className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl font-medium hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
-            >
-              {joinLoading ? "Katılıyor..." : "Turnuvayı Başlat / Katıl"}
-            </button>
-
-            {joinLoading && (
-              <div className="flex items-center justify-center mt-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
-                <span className="text-blue-600 font-medium">Turnuva yükleniyor...</span>
-              </div>
-            )}
-            {joinError && (
-              <div className="mt-4 text-red-600 text-sm font-semibold text-center">
-                {joinError}
-              </div>
-            )}
-
-            <div className="text-center">
-              <p className="text-sm text-gray-600 mb-2">Örnek ID'ler:</p>
-              <div className="flex flex-wrap justify-center gap-2">
-                <button 
-                  onClick={() => setTournamentId("demo-turnuva")}
-                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  demo-turnuva
-                </button>
-                <button 
-                  onClick={() => setTournamentId("test-2024")}
-                  className="text-xs bg-gray-100 px-3 py-1 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  test-2024
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <TournamentJoinForm
+        isAdmin={isAdmin()}
+        userName={user.name}
+        savedTournaments={savedTournaments}
+        onJoinTournament={(normalizedId) => {
+          const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 5);
+          setSavedTournaments(updatedTournaments);
+          localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
+          setTournamentId(normalizedId);
+          setShowJoinForm(false);
+        }}
+      />
     );
   }
 
   return <TournamentApp 
     tournamentId={tournamentId} 
-    setShowJoinForm={setShowJoinForm}
-    savedTournaments={savedTournaments}
-    setSavedTournaments={setSavedTournaments}
+    user={user}
+    onLogout={logout}
+    isAdmin={isAdmin()}
   />;
+}
+
+interface User {
+  id: string;
+  name: string;
+  type: 'admin' | 'player';
+  createdAt: Date;
 }
 
 function TournamentApp({ 
   tournamentId, 
-  setShowJoinForm, 
-  savedTournaments, 
-  setSavedTournaments 
+  user,
+  onLogout,
+  isAdmin
 }: { 
   tournamentId: string; 
-  setShowJoinForm: (show: boolean) => void;
-  savedTournaments: string[];
-  setSavedTournaments: (tournaments: string[]) => void;
+  user: User;
+  onLogout: () => void;
+  isAdmin: boolean;
 }) {
-  const { data: tournamentData, loading, error, updateTournament, deleteTournament } = usePrismaTournament(tournamentId);
+  const { data: tournamentData, loading, error, updateTournament } = usePrismaTournament(tournamentId);
 
   // Tüm useState'leri en üstte tanımla - conditional render'dan önce!
   const [players, setPlayers] = useState<string[]>([]);
@@ -810,84 +727,84 @@ function TournamentApp({
                   </span>
                 )}
               </div>
-              <div className="mt-6">
-                <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 text-white rounded-3xl p-6 shadow-xl">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                    <div className="space-y-2">
-                      <span className="text-xs uppercase tracking-[0.35em] text-white/70">Aktif Turnuva</span>
-                      <div className="text-2xl md:text-4xl font-black leading-tight break-words">
-                        {tournamentId || "Turnuva ID'si seçilmedi"}
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-sm text-white/80">
-                        <div className="flex items-center gap-1">
-                          <span>👥</span>
-                          <span>{players.length} oyuncu</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span>🌀</span>
-                          <span>{rounds.length} tur</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span>⏸️</span>
-                          <span>{totalByeAssignments} bay hakkı</span>
-                        </div>
-                      </div>
+            </div>
+            {/* Kullanıcı Bilgileri ve Çıkış */}
+            <div className="flex flex-col items-end gap-2 ml-4">
+              <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                <span className="text-2xl">{isAdmin ? "👤" : "🎾"}</span>
+                <div className="text-right">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{isAdmin ? "Admin" : "Oyuncu"}</div>
+                  <div className="text-sm font-bold text-gray-800">{user.name}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+                    onLogout();
+                  }
+                }}
+                className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors font-medium"
+              >
+                Çıkış Yap
+              </button>
+            </div>
+          </div>
+          <div className="mt-6">
+            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 text-white rounded-3xl p-6 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-[0.35em] text-white/70">Aktif Turnuva</span>
+                  <div className="text-2xl md:text-4xl font-black leading-tight break-words">
+                    {tournamentId || "Turnuva ID'si seçilmedi"}
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-sm text-white/80">
+                    <div className="flex items-center gap-1">
+                      <span>👥</span>
+                      <span>{players.length} oyuncu</span>
                     </div>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                      <button
-                        onClick={handleCopyTournamentId}
-                        className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent"
-                      >
-                        📋 <span>ID'yi Kopyala</span>
-                      </button>
-                      {copyStatus === "copied" && (
-                        <span className="text-xs font-semibold rounded-full bg-emerald-400/25 text-white px-3 py-1">
-                          Kopyalandı!
-                        </span>
-                      )}
-                      {copyStatus === "error" && (
-                        <span className="text-xs font-semibold rounded-full bg-red-400/30 text-white px-3 py-1">
-                          Kopyalanamadı
-                        </span>
-                      )}
+                    <div className="flex items-center gap-1">
+                      <span>🌀</span>
+                      <span>{rounds.length} tur</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span>⏸️</span>
+                      <span>{totalByeAssignments} bay hakkı</span>
                     </div>
                   </div>
                 </div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                  <button
+                    onClick={handleCopyTournamentId}
+                    className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent"
+                  >
+                    📋 <span>ID'yi Kopyala</span>
+                  </button>
+                  {copyStatus === "copied" && (
+                    <span className="text-xs font-semibold rounded-full bg-emerald-400/25 text-white px-3 py-1">
+                      Kopyalandı!
+                    </span>
+                  )}
+                  {copyStatus === "error" && (
+                    <span className="text-xs font-semibold rounded-full bg-red-400/30 text-white px-3 py-1">
+                      Kopyalanamadı
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  if (confirm('Bu turnuvayı tamamen silmek istediğinizden emin misiniz? Tüm veriler kaybolacak!')) {
-                    // Firebase'den sil
-                    deleteTournament();
-                    
-                    // localStorage'daki kayitli turnuvalar listesinden de kaldir
-                    const updatedTournaments = savedTournaments.filter(t => t !== tournamentId);
-                    setSavedTournaments(updatedTournaments);
-                    localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
-                    
-                    // Ana ekrana dön
-                    setShowJoinForm(true);
-                  }
-                }}
-                className="text-sm bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg transition-colors"
-              >
-                🗑️ Sil
-              </button>
-              <button
-                onClick={() => setShowJoinForm(true)}
-                className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded-lg transition-colors"
-              >
-                🚪 Çıkış
-              </button>
             </div>
           </div>
         </header>
 
         {/* Player editor */}
         <section className="bg-white rounded-2xl shadow p-4 mb-6">
-          <h2 className="text-xl font-semibold mb-3">Oyuncular</h2>
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-xl font-semibold">Oyuncular</h2>
+            {!isAdmin && (
+              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                👁️ Sadece Görüntüleme
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {players.map((p, idx) => (
               <input
@@ -895,7 +812,9 @@ function TournamentApp({
                 value={p}
                 aria-label={`Oyuncu ${idx + 1}`}
                 placeholder={`Oyuncu ${idx + 1}`}
+                disabled={!isAdmin}
                 onChange={(e) => {
+                  if (!isAdmin) return;
                   const next = [...players];
                   const old = next[idx];
                   const val = e.target.value;
@@ -917,19 +836,23 @@ function TournamentApp({
                   setByeCounts(newByeCounts);
                 }}
                 onBlur={() => {
+                  if (!isAdmin) return;
                   persistTournamentState({
                     players,
                     totals,
                     byeCounts
                   });
                 }}
-                className="border rounded-xl px-3 py-2 focus:outline-none focus:ring w-full"
+                className={`border rounded-xl px-3 py-2 focus:outline-none focus:ring w-full ${
+                  !isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''
+                }`}
               />
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-3 mt-4">
-            <button
-              onClick={() => {
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-3 mt-4">
+              <button
+                onClick={() => {
                 const name = prompt("Yeni oyuncu adı (oyuncu sayısı çift ve ≥8 olmalı)");
                 if (!name || name.trim() === "") return;
                 const trimmedName = name.trim();
@@ -1017,20 +940,22 @@ function TournamentApp({
                 Oyuncu sayısı: {players.length} | Bay: {byesNeededNow}
               </div>
             </div>
-          </div>
-
-          <div className="mt-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-gray-800">Oyuncu Havuzu</h3>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={handleAddPlayerToPool}
-                  className="px-3 py-2 rounded-xl bg-blue-100 text-blue-700 text-sm hover:bg-blue-200"
-                >
-                  + Havuza Oyuncu Ekle
-                </button>
-              </div>
             </div>
+          )}
+
+          {isAdmin && (
+            <div className="mt-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold text-gray-800">Oyuncu Havuzu</h3>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleAddPlayerToPool}
+                    className="px-3 py-2 rounded-xl bg-blue-100 text-blue-700 text-sm hover:bg-blue-200"
+                  >
+                    + Havuza Oyuncu Ekle
+                  </button>
+                </div>
+              </div>
             <p className="text-xs text-gray-500 mt-1">
               Havuzdaki oyuncuları tek tıkla turnuvaya ekleyebilir veya listeden kaldırabilirsiniz.
             </p>
@@ -1061,7 +986,8 @@ function TournamentApp({
                 </div>
               ))}
             </div>
-          </div>
+            </div>
+          )}
 
           {/* Tur Hesaplama Bilgi Paneli */}
           {(() => {
@@ -1123,20 +1049,28 @@ function TournamentApp({
             );
           })()}
 
-          <div className="flex items-center gap-3 mt-4">
-            <button
-              onClick={startTournament}
-              className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
-            >
-              Turnuvayı Başlat (Tur 1 Rastgele)
-            </button>
-            <button
-              onClick={resetTournament}
-              className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
-            >
-              Sıfırla
-            </button>
-          </div>
+          {isAdmin ? (
+            <div className="flex items-center gap-3 mt-4">
+              <button
+                onClick={startTournament}
+                className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
+              >
+                Turnuvayı Başlat (Tur 1 Rastgele)
+              </button>
+              <button
+                onClick={resetTournament}
+                className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
+              >
+                Sıfırla
+              </button>
+            </div>
+          ) : (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mt-4">
+              <p className="text-sm text-orange-700">
+                🔒 Sadece <span className="font-bold">Admin</span> kullanıcılar turnuvayı başlatabilir ve sıfırlayabilir.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Rounds */}
@@ -1205,7 +1139,9 @@ function TournamentApp({
                           value={m.scoreA ?? ""}
                           aria-label="A takımı skoru"
                           placeholder="0"
+                          disabled={!isAdmin || r.submitted}
                           onChange={(e) => {
+                            if (!isAdmin) return;
                             const inputValue = e.target.value;
                             // Boş string'i de allow et, sadece number'a dönüştürülen değeri kontrol et
                             if (inputValue === "") {
@@ -1219,6 +1155,7 @@ function TournamentApp({
                             }
                           }}
                           onBlur={(e) => {
+                            if (!isAdmin) return;
                             // Blur'da değeri korunmasını sağla
                             const inputValue = e.target.value;
                             if (inputValue !== "" && !isNaN(Number(inputValue))) {
@@ -1226,7 +1163,9 @@ function TournamentApp({
                               updateMatchScore(rIdx, mIdx, { scoreA: value });
                             }
                           }}
-                          className="w-full border-2 border-blue-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-blue-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+                          className={`w-full border-2 border-blue-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-blue-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none ${
+                            !isAdmin || r.submitted ? 'bg-gray-100 cursor-not-allowed' : ''
+                          }`}
                         />
                       </div>
                       <div className="bg-white rounded-xl p-3 border-2 border-green-200 shadow-sm">
@@ -1241,7 +1180,9 @@ function TournamentApp({
                           value={m.scoreB ?? ""}
                           aria-label="B takımı skoru"
                           placeholder="0"
+                          disabled={!isAdmin || r.submitted}
                           onChange={(e) => {
+                            if (!isAdmin) return;
                             const inputValue = e.target.value;
                             // Boş string'i de allow et, sadece number'a dönüştürülen değeri kontrol et
                             if (inputValue === "") {
@@ -1255,6 +1196,7 @@ function TournamentApp({
                             }
                           }}
                           onBlur={(e) => {
+                            if (!isAdmin) return;
                             // Blur'da değeri korunmasını sağla
                             const inputValue = e.target.value;
                             if (inputValue !== "" && !isNaN(Number(inputValue))) {
@@ -1262,10 +1204,20 @@ function TournamentApp({
                               updateMatchScore(rIdx, mIdx, { scoreB: value });
                             }
                           }}
-                          className="w-full border-2 border-green-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-green-700 focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none"
+                          className={`w-full border-2 border-green-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-green-700 focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none ${
+                            !isAdmin || r.submitted ? 'bg-gray-100 cursor-not-allowed' : ''
+                          }`}
                         />
                       </div>
                     </div>
+
+                    {!isAdmin && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3">
+                        <p className="text-xs text-orange-700 text-center">
+                          🔒 Sadece <span className="font-bold">Admin</span> skor girebilir
+                        </p>
+                      </div>
+                    )}
 
                     {/* Maç Sonucu Görünümü */}
                     {m.scoreA !== undefined && m.scoreB !== undefined && (m.scoreA > 0 || m.scoreB > 0) && (
@@ -1312,26 +1264,40 @@ function TournamentApp({
               </div>
 
               <div className="mt-3 flex items-center gap-3">
-                {!r.submitted && (
-                  <button
-                    onClick={() => submitRound(rIdx)}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow"
-                  >
-                    Turu Kaydet / Puanları Dağıt
-                  </button>
-                )}
-                {!r.submitted && rIdx === rounds.length - 1 && (
-                  <span className="text-xs text-gray-500">
-                    ➡️ Bu turdaki tüm maçları kaydetmeden yeni eşleşmeler oluşturulamaz.
-                  </span>
-                )}
-                {r.submitted && rIdx === rounds.length - 1 && (
-                  <button
-                    onClick={addNextRound}
-                    className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
-                  >
-                    Sonraki Turu Oluştur
-                  </button>
+                {isAdmin ? (
+                  <>
+                    {!r.submitted && (
+                      <button
+                        onClick={() => submitRound(rIdx)}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow"
+                      >
+                        Turu Kaydet / Puanları Dağıt
+                      </button>
+                    )}
+                    {!r.submitted && rIdx === rounds.length - 1 && (
+                      <span className="text-xs text-gray-500">
+                        ➡️ Bu turdaki tüm maçları kaydetmeden yeni eşleşmeler oluşturulamaz.
+                      </span>
+                    )}
+                    {r.submitted && rIdx === rounds.length - 1 && (
+                      <button
+                        onClick={addNextRound}
+                        className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
+                      >
+                        Sonraki Turu Oluştur
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  r.submitted ? (
+                    <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2">
+                      <span className="text-sm text-green-700">✅ Tur tamamlandı</span>
+                    </div>
+                  ) : (
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
+                      <span className="text-sm text-orange-700">⏳ Tur henüz kaydedilmedi</span>
+                    </div>
+                  )
                 )}
               </div>
             </div>
