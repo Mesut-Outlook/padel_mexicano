@@ -18,6 +18,7 @@ export function TournamentJoinForm({
   const [showDaysInfo, setShowDaysInfo] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
 
   // Günlere göre tahmini tur sayısını hesapla
   const calculateEstimatedRounds = (daysCount: number, courts: number = 2): number => {
@@ -44,6 +45,22 @@ export function TournamentJoinForm({
     return () => clearTimeout(timeout);
   }, [joinLoading]);
 
+  const handleCreateNew = () => {
+    // Yeni turnuva oluştur - otomatik ID
+    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const randomId = Math.random().toString(36).substring(2, 8);
+    const newTournamentId = `turnuva-${timestamp}-${randomId}`;
+    
+    setTournamentId(newTournamentId);
+    setIsCreatingNew(true);
+    setJoinLoading(true);
+    setJoinError(null);
+    
+    // Admin için gün sayısını gönder (yeni turnuva)
+    onJoinTournament(newTournamentId, days);
+    setJoinLoading(false);
+  };
+
   const handleJoin = () => {
     const normalizedId = tournamentId.trim();
     if (normalizedId) {
@@ -52,8 +69,8 @@ export function TournamentJoinForm({
       if (normalizedId !== tournamentId) {
         setTournamentId(normalizedId);
       }
-      // Admin için gün sayısını gönder, oyuncular için undefined
-      onJoinTournament(normalizedId, isAdmin ? days : undefined);
+      // Mevcut turnuvaya katıl - gün sayısı gönderme
+      onJoinTournament(normalizedId, undefined);
       setJoinLoading(false);
     } else {
       alert("Lütfen bir turnuva ID'si girin");
@@ -79,11 +96,11 @@ export function TournamentJoinForm({
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {isAdmin ? "Turnuva ID'si (Oluştur veya Katıl)" : "Turnuva ID'si (Katıl)"}
+              {isAdmin ? "Mevcut Turnuva ID'si" : "Turnuva ID'si"}
             </label>
             <input
               type="text"
-              placeholder="turnuva-ismi-2024"
+              placeholder={isAdmin ? "Örn: turnuva-2025-10-14" : "Turnuva ID'sini girin"}
               value={tournamentId}
               onChange={(e) => setTournamentId(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -91,12 +108,12 @@ export function TournamentJoinForm({
             <p className="text-xs text-gray-500 mt-2">
               {isAdmin ? (
                 <>
-                  Admin olarak turnuva oluşturabilir veya mevcut turnuvalara katılabilirsiniz.<br/>
-                  <span className="text-blue-600 font-medium">Turnuva yoksa otomatik oluşturulur.</span>
+                  Mevcut bir turnuvaya katılmak için ID'sini girin.<br/>
+                  <span className="text-blue-600 font-medium">Yeni turnuva için yukarıdaki butonu kullanın.</span>
                 </>
               ) : (
                 <>
-                  Oyuncu olarak sadece <span className="font-semibold">mevcut turnuvalara</span> katılabilirsiniz.<br/>
+                  Mevcut turnuvaya katılmak için ID'sini girin.<br/>
                   <span className="text-orange-600 font-medium">Yeni turnuva oluşturamazsınız.</span>
                 </>
               )}
@@ -104,10 +121,13 @@ export function TournamentJoinForm({
           </div>
 
           {isAdmin && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                📅 Turnuva Kaç Gün Sürecek?
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4">
+              <label className="block text-sm font-medium text-green-800 mb-2">
+                📅 Yeni Turnuva İçin Gün Sayısı
               </label>
+              <p className="text-xs text-green-600 mb-3">
+                Bu ayar sadece "Yeni Turnuva Oluştur" ile kullanılır
+              </p>
               <div className="grid grid-cols-5 gap-2">
                 {[3, 4, 5, 6, 7].map((dayOption) => (
                   <button
@@ -120,22 +140,22 @@ export function TournamentJoinForm({
                     }}
                     className={`px-4 py-3 rounded-xl font-semibold transition-all ${
                       days === dayOption
-                        ? 'bg-blue-600 text-white shadow-lg scale-105'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-green-600 text-white shadow-lg scale-105'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
                     }`}
                   >
                     {dayOption}
                   </button>
                 ))}
               </div>
-              <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <div className="mt-3 bg-white border border-green-200 rounded-xl p-3">
                 <div className="flex items-start gap-2">
-                  <span className="text-blue-600 text-lg">💡</span>
-                  <div className="text-sm text-blue-700">
+                  <span className="text-green-600 text-lg">💡</span>
+                  <div className="text-sm text-green-700">
                     <div className="font-semibold mb-1">
                       {days} gün = Tahmini {calculateEstimatedRounds(days, 2)} tur
                     </div>
-                    <div className="text-xs text-blue-600">
+                    <div className="text-xs text-green-600">
                       Günde 180 dakika (3 saat) = ~6 tur (30 dk/maç, 2 saha)
                     </div>
                   </div>
@@ -143,7 +163,7 @@ export function TournamentJoinForm({
               </div>
               {showDaysInfo && (
                 <div className="mt-2 text-xs text-green-600 font-medium animate-pulse">
-                  ✓ {days} günlük turnuva seçildi
+                  ✓ {days} günlük turnuva hazır
                 </div>
               )}
             </div>
@@ -168,12 +188,31 @@ export function TournamentJoinForm({
             </div>
           )}
 
+          {isAdmin && (
+            <button
+              onClick={handleCreateNew}
+              disabled={joinLoading}
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 px-6 rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 transition-all shadow-lg"
+            >
+              {joinLoading && isCreatingNew ? "Oluşturuluyor..." : "✨ Yeni Turnuva Oluştur"}
+            </button>
+          )}
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">veya</span>
+            </div>
+          </div>
+
           <button
             onClick={handleJoin}
             disabled={!tournamentId.trim() || joinLoading}
             className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl font-medium hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
           >
-            {joinLoading ? "Katılıyor..." : isAdmin ? "Turnuvayı Başlat / Katıl" : "Turnuvaya Katıl"}
+            {joinLoading && !isCreatingNew ? "Katılıyor..." : isAdmin ? "Mevcut Turnuvaya Katıl" : "Turnuvaya Katıl"}
           </button>
 
           {joinLoading && (
