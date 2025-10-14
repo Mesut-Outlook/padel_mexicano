@@ -21,16 +21,11 @@ export function TournamentJoinForm({
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
 
   // Günlere göre tahmini tur sayısını hesapla
-  const calculateEstimatedRounds = (daysCount: number, courts: number = 2): number => {
+  const calculateEstimatedRounds = (daysCount: number): number => {
     // Her maç 30 dakika
-    // Her gün 180 dakika (3 saat) oyun süresi
-    // Her turda: matchesPerRound = playingPlayers / 4
-    // Tur süresi: Math.ceil(matchesPerRound / courts) * 30
-    
-    // Basitleştirilmiş hesaplama: 
-    // 2 saha için günde yaklaşık 6 tur (180 / 30 = 6)
-    // 3 saha için günde yaklaşık 9 tur
-    const roundsPerDay = Math.floor((180 / 30) * courts);
+    // Her gün 90 dakika oyun süresi
+    // Günde 3 tur (90 / 30 = 3)
+    const roundsPerDay = 3;
     return daysCount * roundsPerDay;
   };
 
@@ -153,10 +148,10 @@ export function TournamentJoinForm({
                   <span className="text-green-600 text-lg">💡</span>
                   <div className="text-sm text-green-700">
                     <div className="font-semibold mb-1">
-                      {days} gün = Tahmini {calculateEstimatedRounds(days, 2)} tur
+                      {days} gün = Tahmini {calculateEstimatedRounds(days)} tur
                     </div>
                     <div className="text-xs text-green-600">
-                      Günde 180 dakika (3 saat) = ~6 tur (30 dk/maç, 2 saha)
+                      Günde 90 dakika = 3 tur (30 dk/maç)
                     </div>
                   </div>
                 </div>

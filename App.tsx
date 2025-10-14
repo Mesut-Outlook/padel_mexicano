@@ -40,7 +40,7 @@ export default function App() {
           
           // Gün sayısını localStorage'a kaydet (yeni turnuva oluşturuluyorsa)
           if (days && isAdmin()) {
-            const roundsPerDay = 6; // 180 dakika / 30 dakika = 6 tur/gün (2 saha)
+            const roundsPerDay = 3; // 90 dakika / 30 dakika = 3 tur/gün
             const tournamentSettings = {
               id: normalizedId,
               days: days,
@@ -376,8 +376,8 @@ function TournamentApp({
     
     if (plannedDays && courts) {
       // Gün sayısı ve saha sayısına göre hesaplama
-      // Her gün maksimum süre: örneğin 3 saat (180 dakika)
-      const dailyPlayTime = 180; // dakika
+      // Her gün maksimum süre: 90 dakika
+      const dailyPlayTime = 90; // dakika
       const roundsPerDay = Math.floor(dailyPlayTime / timePerRound);
       optimalRounds = plannedDays * roundsPerDay;
     } else {
@@ -397,7 +397,7 @@ function TournamentApp({
       description += ` (her turda ${byesPerRound} bay)`;
     }
     if (plannedDays) {
-      description += ` | ${plannedDays} gün x ${Math.floor(180 / timePerRound)} tur/gün`;
+      description += ` | ${plannedDays} gün x ${Math.floor(90 / timePerRound)} tur/gün`;
     }
     
     return { 
@@ -1079,7 +1079,7 @@ function TournamentApp({
             // Gün bazlı planlama bilgileri
             const plannedDays = tournamentSettings.days || null;
             const estimatedRounds = tournamentSettings.estimatedRounds || null;
-            const roundsPerDay = 6; // 180 dakika / 30 dakika = 6 tur/gün
+            const roundsPerDay = 3; // 90 dakika / 30 dakika = 3 tur/gün
             const currentDay = plannedDays ? Math.ceil(currentRounds / roundsPerDay) : null;
             const roundsToday = plannedDays ? (currentRounds % roundsPerDay || roundsPerDay) : null;
             
@@ -1098,7 +1098,7 @@ function TournamentApp({
                           📅 {plannedDays} günlük plan
                         </span>
                         <span className="text-blue-700 ml-2">
-                          (Günlük 180 dk = ~6 tur/gün)
+                          (Günlük 90 dk = 3 tur/gün)
                         </span>
                       </div>
                       <div className="text-right">
