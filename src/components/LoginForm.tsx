@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useAuth } from '../hooks/useAuth';
 
-export function LoginForm() {
-  const { login } = useAuth();
+interface LoginFormProps {
+  onLogin: (name: string, password?: string) => Promise<boolean>;
+}
+
+export function LoginForm({ onLogin }: LoginFormProps) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [isAdminLogin, setIsAdminLogin] = useState(false);
@@ -15,7 +17,7 @@ export function LoginForm() {
     setError(null);
 
     try {
-      const success = await login(name, isAdminLogin ? password : undefined);
+      const success = await onLogin(name, isAdminLogin ? password : undefined);
       
       if (!success) {
         if (isAdminLogin) {

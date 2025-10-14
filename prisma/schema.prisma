@@ -17,6 +17,14 @@ model Tournament {
   courtCount      Int      @default(2)
   tournamentStarted Boolean @default(false)
   currentRound    Int      @default(0)
+  
+  // Yeni alanlar
+  days            Int?     // Turnuva kaç gün sürecek
+  estimatedRounds Int?     // Tahmini tur sayısı
+  startDate       DateTime? // Başlangıç tarihi
+  endDate         DateTime? // Bitiş tarihi
+  location        String?  // Turnuva yeri (serbest metin)
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

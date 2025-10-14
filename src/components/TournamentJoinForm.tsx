@@ -4,7 +4,7 @@ interface TournamentJoinFormProps {
   isAdmin: boolean;
   userName: string;
   savedTournaments: string[];
-  onJoinTournament: (tournamentId: string) => void;
+  onJoinTournament: (tournamentId: string, days?: number) => void;
 }
 
 export function TournamentJoinForm({ 
@@ -14,8 +14,24 @@ export function TournamentJoinForm({
   onJoinTournament 
 }: TournamentJoinFormProps) {
   const [tournamentId, setTournamentId] = useState<string>("");
+  const [days, setDays] = useState<number>(5);
+  const [showDaysInfo, setShowDaysInfo] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+
+  // Günlere göre tahmini tur sayısını hesapla
+  const calculateEstimatedRounds = (daysCount: number, courts: number = 2): number => {
+    // Her maç 30 dakika
+    // Her gün 180 dakika (3 saat) oyun süresi
+    // Her turda: matchesPerRound = playingPlayers / 4
+    // Tur süresi: Math.ceil(matchesPerRound / courts) * 30
+    
+    // Basitleştirilmiş hesaplama: 
+    // 2 saha için günde yaklaşık 6 tur (180 / 30 = 6)
+    // 3 saha için günde yaklaşık 9 tur
+    const roundsPerDay = Math.floor((180 / 30) * courts);
+    return daysCount * roundsPerDay;
+  };
 
   useEffect(() => {
     let timeout: any;
@@ -36,7 +52,8 @@ export function TournamentJoinForm({
       if (normalizedId !== tournamentId) {
         setTournamentId(normalizedId);
       }
-      onJoinTournament(normalizedId);
+      // Admin için gün sayısını gönder, oyuncular için undefined
+      onJoinTournament(normalizedId, isAdmin ? days : undefined);
       setJoinLoading(false);
     } else {
       alert("Lütfen bir turnuva ID'si girin");
@@ -85,6 +102,52 @@ export function TournamentJoinForm({
               )}
             </p>
           </div>
+
+          {isAdmin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📅 Turnuva Kaç Gün Sürecek?
+              </label>
+              <div className="grid grid-cols-5 gap-2">
+                {[3, 4, 5, 6, 7].map((dayOption) => (
+                  <button
+                    key={dayOption}
+                    type="button"
+                    onClick={() => {
+                      setDays(dayOption);
+                      setShowDaysInfo(true);
+                      setTimeout(() => setShowDaysInfo(false), 3000);
+                    }}
+                    className={`px-4 py-3 rounded-xl font-semibold transition-all ${
+                      days === dayOption
+                        ? 'bg-blue-600 text-white shadow-lg scale-105'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {dayOption}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-blue-600 text-lg">💡</span>
+                  <div className="text-sm text-blue-700">
+                    <div className="font-semibold mb-1">
+                      {days} gün = Tahmini {calculateEstimatedRounds(days, 2)} tur
+                    </div>
+                    <div className="text-xs text-blue-600">
+                      Günde 180 dakika (3 saat) = ~6 tur (30 dk/maç, 2 saha)
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {showDaysInfo && (
+                <div className="mt-2 text-xs text-green-600 font-medium animate-pulse">
+                  ✓ {days} günlük turnuva seçildi
+                </div>
+              )}
+            </div>
+          )}
 
           {savedTournaments.length > 0 && (
             <div>

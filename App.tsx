@@ -3,6 +3,7 @@ import { usePrismaTournament } from "./src/hooks/usePrismaTournament";
 import { useAuth } from "./src/hooks/useAuth";
 import { LoginForm } from "./src/components/LoginForm";
 import { TournamentJoinForm } from "./src/components/TournamentJoinForm";
+import { TournamentSettingsModal, TournamentSettings } from "./src/components/TournamentSettingsModal";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
 // After removing required BYEs to make players divisible by 4, pair as:
@@ -11,7 +12,7 @@ import { TournamentJoinForm } from "./src/components/TournamentJoinForm";
 // Points split within each team using the round's starting ranking snapshot: 55% to lower-ranked, 45% to higher-ranked.
 
 export default function App() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, login } = useAuth();
   const [tournamentId, setTournamentId] = useState<string>("");
   const [showJoinForm, setShowJoinForm] = useState(true);
   const [savedTournaments, setSavedTournaments] = useState<string[]>(() => {
@@ -22,7 +23,7 @@ export default function App() {
 
   // Kullanıcı giriş yapmadıysa login formu göster
   if (!user) {
-    return <LoginForm />;
+    return <LoginForm onLogin={login} />;
   }
 
   // Turnuva seçilmediyse join formu göster
@@ -32,10 +33,23 @@ export default function App() {
         isAdmin={isAdmin()}
         userName={user.name}
         savedTournaments={savedTournaments}
-        onJoinTournament={(normalizedId) => {
+        onJoinTournament={(normalizedId, days) => {
           const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 5);
           setSavedTournaments(updatedTournaments);
           localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
+          
+          // Gün sayısını localStorage'a kaydet (yeni turnuva oluşturuluyorsa)
+          if (days && isAdmin()) {
+            const roundsPerDay = 6; // 180 dakika / 30 dakika = 6 tur/gün (2 saha)
+            const tournamentSettings = {
+              id: normalizedId,
+              days: days,
+              estimatedRounds: days * roundsPerDay,
+              createdAt: new Date().toISOString()
+            };
+            localStorage.setItem(`tournament-settings-${normalizedId}`, JSON.stringify(tournamentSettings));
+          }
+          
           setTournamentId(normalizedId);
           setShowJoinForm(false);
         }}
@@ -79,8 +93,27 @@ function TournamentApp({
   const [byeCounts, setByeCounts] = useState<Record<string, number>>({});
   const [courtCount, setCourtCount] = useState<number>(2); // Saha sayısı
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [tournamentSettings, setTournamentSettings] = useState<TournamentSettings>({});
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toKey = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
+
+  // Turnuva ayarlarını yükle
+  useEffect(() => {
+    const savedSettings = localStorage.getItem(`tournament-settings-${tournamentId}`);
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setTournamentSettings({
+          startDate: parsed.startDate,
+          endDate: parsed.endDate,
+          location: parsed.location
+        });
+      } catch (error) {
+        console.error('Tournament settings parse error:', error);
+      }
+    }
+  }, [tournamentId]);
 
   // Fallback to empty data if no tournamentData but not loading
   const safeData = tournamentData || {
@@ -326,20 +359,34 @@ function TournamentApp({
         matchesPerPlayer: 0, 
         description: "Geçersiz oyuncu sayısı",
         timePerRound: 0,
-        totalTime: 0
+        totalTime: 0,
+        matchesPerRound: 0
       };
     }
 
     const playingPerRound = Math.floor(playerCount / 4) * 4;
     const byesPerRound = playerCount - playingPerRound;
     const matchesPerRound = playingPerRound / 4;
-    const timePerRound = Math.ceil(matchesPerRound / courts) * 20; // Her maç ~20dk
+    const MATCH_DURATION = 30; // Maç süresi 30 dakika
+    const timePerRound = Math.ceil(matchesPerRound / courts) * MATCH_DURATION;
     
+    // Eğer turnuva ayarlarında gün ve saha sayısı varsa, ona göre hesapla
+    const plannedDays = tournamentSettings.days;
     let optimalRounds;
-    if (byesPerRound === 0) {
-      optimalRounds = Math.max(6, Math.floor(playerCount * 0.75));
+    
+    if (plannedDays && courts) {
+      // Gün sayısı ve saha sayısına göre hesaplama
+      // Her gün maksimum süre: örneğin 3 saat (180 dakika)
+      const dailyPlayTime = 180; // dakika
+      const roundsPerDay = Math.floor(dailyPlayTime / timePerRound);
+      optimalRounds = plannedDays * roundsPerDay;
     } else {
-      optimalRounds = Math.ceil(playerCount * 0.6);
+      // Varsayılan hesaplama (eski mantık)
+      if (byesPerRound === 0) {
+        optimalRounds = Math.max(6, Math.floor(playerCount * 0.75));
+      } else {
+        optimalRounds = Math.ceil(playerCount * 0.6);
+      }
     }
     
     const matchesPerPlayer = Math.floor((optimalRounds * 4) / playerCount);
@@ -348,6 +395,9 @@ function TournamentApp({
     let description = `${playerCount} oyuncu, ${courts} saha için optimal: ${optimalRounds} tur`;
     if (byesPerRound > 0) {
       description += ` (her turda ${byesPerRound} bay)`;
+    }
+    if (plannedDays) {
+      description += ` | ${plannedDays} gün x ${Math.floor(180 / timePerRound)} tur/gün`;
     }
     
     return { 
@@ -771,8 +821,38 @@ function TournamentApp({
                       <span>{totalByeAssignments} bay hakkı</span>
                     </div>
                   </div>
+                  {/* Turnuva Bilgileri */}
+                  {(tournamentSettings.startDate || tournamentSettings.location) && (
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-white/70">
+                      {tournamentSettings.startDate && tournamentSettings.endDate && (
+                        <div className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full">
+                          <span>📅</span>
+                          <span>
+                            {new Date(tournamentSettings.startDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                            {' - '}
+                            {new Date(tournamentSettings.endDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                      )}
+                      {tournamentSettings.location && (
+                        <div className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full">
+                          <span>📍</span>
+                          <span>{tournamentSettings.location}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                  {isAdmin && (
+                    <button
+                      onClick={() => setShowSettingsModal(true)}
+                      className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60"
+                      title="Turnuva tarih ve yer bilgilerini düzenle"
+                    >
+                      ⚙️ <span>Ayarlar</span>
+                    </button>
+                  )}
                   <button
                     onClick={handleCopyTournamentId}
                     className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent"
@@ -996,11 +1076,53 @@ function TournamentApp({
             const progress = Math.min(100, (currentRounds / calc.optimalRounds) * 100);
             const remaining = Math.max(0, calc.optimalRounds - currentRounds);
             
+            // Gün bazlı planlama bilgileri
+            const plannedDays = tournamentSettings.days || null;
+            const estimatedRounds = tournamentSettings.estimatedRounds || null;
+            const roundsPerDay = 6; // 180 dakika / 30 dakika = 6 tur/gün
+            const currentDay = plannedDays ? Math.ceil(currentRounds / roundsPerDay) : null;
+            const roundsToday = plannedDays ? (currentRounds % roundsPerDay || roundsPerDay) : null;
+            
             return (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4">
                 <h3 className="text-lg font-semibold text-blue-800 mb-2">
                   🏆 Turnuva Planlama
                 </h3>
+                
+                {/* Gün bazlı planlama bilgisi */}
+                {plannedDays && (
+                  <div className="bg-blue-100 border border-blue-300 rounded-lg p-3 mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold text-blue-900">
+                          📅 {plannedDays} günlük plan
+                        </span>
+                        <span className="text-blue-700 ml-2">
+                          (Günlük 180 dk = ~6 tur/gün)
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-medium text-blue-700">
+                          Şu an: {currentDay}. gün
+                        </div>
+                        <div className="text-xs text-blue-600">
+                          Bugün {roundsToday}/{roundsPerDay} tur tamamlandı
+                        </div>
+                      </div>
+                    </div>
+                    {estimatedRounds && (
+                      <div className="mt-2 text-sm text-blue-700">
+                        💡 Planlanan: <span className="font-semibold">{estimatedRounds} tur</span>
+                        {calc.optimalRounds !== estimatedRounds && (
+                          <span className="ml-2">
+                            (Eşit dağılım için {calc.optimalRounds} tur önerilir)
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <div className="font-medium text-blue-700">Eşit Dağılım İçin</div>
@@ -1014,7 +1136,7 @@ function TournamentApp({
                   <div>
                     <div className="font-medium text-blue-700">Mevcut Durum</div>
                     <div className="text-lg font-bold text-blue-900">
-                      {currentRounds}/{calc.optimalRounds} Tur
+                      {currentRounds}/{plannedDays ? estimatedRounds : calc.optimalRounds} Tur
                     </div>
                     <div className="text-blue-600">
                       {remaining > 0 ? `${remaining} tur daha önerilen` : "Hedef tamamlandı!"}
@@ -1043,7 +1165,7 @@ function TournamentApp({
                   </div>
                 </div>
                 <div className="mt-3 text-xs text-blue-600">
-                  💡 {calc.matchesPerRound} maç/tur × {courtCount} saha = {calc.timePerRound} dk (maç başına ~20dk)
+                  💡 {calc.matchesPerRound} maç/tur × {courtCount} saha = {calc.timePerRound} dk (maç başına 30dk)
                 </div>
               </div>
             );
@@ -1134,6 +1256,8 @@ function TournamentApp({
                         </label>
                         <input
                           type="number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           min={0}
                           max={32}
                           value={m.scoreA ?? ""}
@@ -1143,24 +1267,29 @@ function TournamentApp({
                           onChange={(e) => {
                             if (!isAdmin) return;
                             const inputValue = e.target.value;
-                            // Boş string'i de allow et, sadece number'a dönüştürülen değeri kontrol et
+                            
+                            // Boş string ise temizle
                             if (inputValue === "") {
                               updateMatchScore(rIdx, mIdx, { scoreA: undefined });
-                            } else {
-                              const value = Math.min(32, Math.max(0, Number(inputValue)));
-                              // NaN kontrolü ekle
-                              if (!isNaN(value)) {
-                                updateMatchScore(rIdx, mIdx, { scoreA: value });
-                              }
+                              return;
                             }
+                            
+                            // Sayıya çevir ve kontrol et
+                            const numValue = parseInt(inputValue, 10);
+                            
+                            // Geçersiz değerleri engelle
+                            if (isNaN(numValue) || numValue < 0) {
+                              return;
+                            }
+                            
+                            // 32'den büyükse 32 yap
+                            const value = Math.min(32, numValue);
+                            updateMatchScore(rIdx, mIdx, { scoreA: value });
                           }}
-                          onBlur={(e) => {
-                            if (!isAdmin) return;
-                            // Blur'da değeri korunmasını sağla
-                            const inputValue = e.target.value;
-                            if (inputValue !== "" && !isNaN(Number(inputValue))) {
-                              const value = Math.min(32, Math.max(0, Number(inputValue)));
-                              updateMatchScore(rIdx, mIdx, { scoreA: value });
+                          onKeyDown={(e) => {
+                            // Negatif değer girişini engelle
+                            if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                              e.preventDefault();
                             }
                           }}
                           className={`w-full border-2 border-blue-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-blue-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none ${
@@ -1175,6 +1304,8 @@ function TournamentApp({
                         </label>
                         <input
                           type="number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           min={0}
                           max={32}
                           value={m.scoreB ?? ""}
@@ -1184,24 +1315,29 @@ function TournamentApp({
                           onChange={(e) => {
                             if (!isAdmin) return;
                             const inputValue = e.target.value;
-                            // Boş string'i de allow et, sadece number'a dönüştürülen değeri kontrol et
+                            
+                            // Boş string ise temizle
                             if (inputValue === "") {
                               updateMatchScore(rIdx, mIdx, { scoreB: undefined });
-                            } else {
-                              const value = Math.min(32, Math.max(0, Number(inputValue)));
-                              // NaN kontrolü ekle
-                              if (!isNaN(value)) {
-                                updateMatchScore(rIdx, mIdx, { scoreB: value });
-                              }
+                              return;
                             }
+                            
+                            // Sayıya çevir ve kontrol et
+                            const numValue = parseInt(inputValue, 10);
+                            
+                            // Geçersiz değerleri engelle
+                            if (isNaN(numValue) || numValue < 0) {
+                              return;
+                            }
+                            
+                            // 32'den büyükse 32 yap
+                            const value = Math.min(32, numValue);
+                            updateMatchScore(rIdx, mIdx, { scoreB: value });
                           }}
-                          onBlur={(e) => {
-                            if (!isAdmin) return;
-                            // Blur'da değeri korunmasını sağla
-                            const inputValue = e.target.value;
-                            if (inputValue !== "" && !isNaN(Number(inputValue))) {
-                              const value = Math.min(32, Math.max(0, Number(inputValue)));
-                              updateMatchScore(rIdx, mIdx, { scoreB: value });
+                          onKeyDown={(e) => {
+                            // Negatif değer girişini engelle
+                            if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                              e.preventDefault();
                             }
                           }}
                           className={`w-full border-2 border-green-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-green-700 focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none ${
@@ -1399,6 +1535,34 @@ function TournamentApp({
           </div>
         </section>
       </div>
+
+      {/* Turnuva Ayarları Modal */}
+      <TournamentSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        currentSettings={tournamentSettings}
+        onSave={(settings) => {
+          setTournamentSettings(settings);
+          // localStorage'a kaydet
+          const savedSettings = localStorage.getItem(`tournament-settings-${tournamentId}`);
+          let currentData = {};
+          if (savedSettings) {
+            try {
+              currentData = JSON.parse(savedSettings);
+            } catch (e) {
+              console.error('Parse error:', e);
+            }
+          }
+          
+          const updatedSettings = {
+            ...currentData,
+            ...settings,
+            updatedAt: new Date().toISOString()
+          };
+          
+          localStorage.setItem(`tournament-settings-${tournamentId}`, JSON.stringify(updatedSettings));
+        }}
+      />
     </div>
   );
 }
