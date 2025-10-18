@@ -98,10 +98,14 @@ export default function App() {
   }
 
   return <TournamentApp 
-    tournamentId={tournamentId} 
+    tournamentId={tournamentId}
     user={user}
     onLogout={logout}
     isAdmin={isAdmin()}
+    onBackToDashboard={() => {
+      setShowJoinForm(true);
+      setShowAdminDashboard(false);
+    }}
   />;
 }
 
@@ -116,12 +120,14 @@ function TournamentApp({
   tournamentId, 
   user,
   onLogout,
-  isAdmin
+  isAdmin,
+  onBackToDashboard
 }: { 
   tournamentId: string; 
   user: User;
   onLogout: () => void;
   isAdmin: boolean;
+  onBackToDashboard?: () => void;
 }) {
   const { data: tournamentData, loading, error, updateTournament } = usePrismaTournament(tournamentId);
 
@@ -827,16 +833,26 @@ function TournamentApp({
                   <div className="text-sm font-bold text-gray-800">{user.name}</div>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
-                    onLogout();
-                  }
-                }}
-                className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors font-medium"
-              >
-                Çıkış Yap
-              </button>
+              <div className="flex gap-2">
+                {isAdmin && onBackToDashboard && (
+                  <button
+                    onClick={onBackToDashboard}
+                    className="text-xs px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors font-medium"
+                  >
+                    🏠 Dashboard
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+                      onLogout();
+                    }
+                  }}
+                  className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors font-medium"
+                >
+                  Çıkış Yap
+                </button>
+              </div>
             </div>
           </div>
           <div className="mt-6">

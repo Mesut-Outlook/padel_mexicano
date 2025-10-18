@@ -24,14 +24,23 @@ export function TournamentSettingsModal({
   const [startDate, setStartDate] = useState(currentSettings?.startDate || '');
   const [endDate, setEndDate] = useState(currentSettings?.endDate || '');
   const [location, setLocation] = useState(currentSettings?.location || '');
+  const [days, setDays] = useState(currentSettings?.days || 5);
 
   if (!isOpen) return null;
+
+  // Günlere göre tahmini tur sayısını hesapla (Günde 3 tur)
+  const calculateEstimatedRounds = (daysCount: number): number => {
+    const roundsPerDay = 3; // Her gün 90 dakika / 30 dk maç = 3 tur
+    return daysCount * roundsPerDay;
+  };
 
   const handleSave = () => {
     onSave({
       startDate: startDate || undefined,
       endDate: endDate || undefined,
-      location: location || undefined
+      location: location || undefined,
+      days: days,
+      estimatedRounds: calculateEstimatedRounds(days)
     });
     onClose();
   };
@@ -66,6 +75,45 @@ export function TournamentSettingsModal({
         </div>
 
         <div className="space-y-5">
+          {/* Gün Sayısı Seçimi */}
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4">
+            <label className="block text-sm font-medium text-green-800 mb-2">
+              📅 Turnuva Gün Sayısı
+            </label>
+            <p className="text-xs text-green-600 mb-3">
+              Turnuva kaç gün sürecek? (Otomatik tur hesaplaması yapılacak)
+            </p>
+            <div className="grid grid-cols-5 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((dayOption) => (
+                <button
+                  key={dayOption}
+                  type="button"
+                  onClick={() => setDays(dayOption)}
+                  className={`px-4 py-3 rounded-xl font-semibold transition-all ${
+                    days === dayOption
+                      ? 'bg-green-600 text-white shadow-lg scale-105'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                >
+                  {dayOption}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 bg-white border border-green-200 rounded-xl p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-green-600 text-lg">💡</span>
+                <div className="text-sm text-green-700">
+                  <div className="font-semibold mb-1">
+                    {days} gün = Tahmini {calculateEstimatedRounds(days)} tur
+                  </div>
+                  <div className="text-xs text-green-600">
+                    Günde 90 dakika = 3 tur (30 dk/maç)
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               📅 Başlangıç Tarihi

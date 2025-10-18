@@ -124,7 +124,7 @@ export function TournamentJoinForm({
                 Bu ayar sadece "Yeni Turnuva Oluştur" ile kullanılır
               </p>
               <div className="grid grid-cols-5 gap-2">
-                {[3, 4, 5, 6, 7].map((dayOption) => (
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((dayOption) => (
                   <button
                     key={dayOption}
                     type="button"
