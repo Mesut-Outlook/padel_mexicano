@@ -4,7 +4,7 @@ interface TournamentJoinFormProps {
   isAdmin: boolean;
   userName: string;
   savedTournaments: string[];
-  onJoinTournament: (tournamentId: string, days?: number, tournamentName?: string) => void;
+  onJoinTournament: (tournamentId: string, days?: number, tournamentName?: string, courtCount?: number) => void;
 }
 
 export function TournamentJoinForm({ 
@@ -16,6 +16,7 @@ export function TournamentJoinForm({
   const [tournamentId, setTournamentId] = useState<string>("");
   const [tournamentName, setTournamentName] = useState<string>("");
   const [days, setDays] = useState<number>(5);
+  const [courtCount, setCourtCount] = useState<number>(2);
   const [showDaysInfo, setShowDaysInfo] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -52,8 +53,8 @@ export function TournamentJoinForm({
     setJoinLoading(true);
     setJoinError(null);
     
-    // Admin için gün sayısını ve turnuva ismini gönder (yeni turnuva)
-    onJoinTournament(newTournamentId, days, tournamentName || undefined);
+    // Admin için tüm ayarları gönder (yeni turnuva)
+    onJoinTournament(newTournamentId, days, tournamentName || undefined, courtCount);
     setJoinLoading(false);
   };
 
@@ -181,6 +182,45 @@ export function TournamentJoinForm({
                   ✓ {days} günlük turnuva hazır
                 </div>
               )}
+            </div>
+
+            {/* Saha Sayısı */}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4">
+              <label className="block text-sm font-medium text-blue-800 mb-2">
+                🏟️ Saha Sayısı
+              </label>
+              <p className="text-xs text-blue-600 mb-3">
+                Turnuvada kaç saha kullanılacak?
+              </p>
+              <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map((courtOption) => (
+                  <button
+                    key={courtOption}
+                    type="button"
+                    onClick={() => setCourtCount(courtOption)}
+                    className={`px-4 py-3 rounded-xl font-semibold transition-all ${
+                      courtCount === courtOption
+                        ? 'bg-blue-600 text-white shadow-lg scale-105'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                  >
+                    {courtOption}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 bg-white border border-blue-200 rounded-xl p-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-blue-600 text-lg">⏱️</span>
+                  <div className="text-sm text-blue-700">
+                    <div className="font-semibold mb-1">
+                      {courtCount} saha seçildi
+                    </div>
+                    <div className="text-xs text-blue-600">
+                      Daha fazla saha = Daha hızlı oyun akışı
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             </>
           )}

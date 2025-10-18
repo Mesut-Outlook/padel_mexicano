@@ -10,6 +10,7 @@ interface TournamentSettingsModalProps {
 export interface TournamentSettings {
   name?: string;
   days?: number;
+  courtCount?: number;
   estimatedRounds?: number;
   startDate?: string;
   endDate?: string;
@@ -27,6 +28,7 @@ export function TournamentSettingsModal({
   const [endDate, setEndDate] = useState(currentSettings?.endDate || '');
   const [location, setLocation] = useState(currentSettings?.location || '');
   const [days, setDays] = useState(currentSettings?.days || 5);
+  const [courtCount, setCourtCount] = useState(currentSettings?.courtCount || 2);
 
   if (!isOpen) return null;
 
@@ -43,6 +45,7 @@ export function TournamentSettingsModal({
       endDate: endDate || undefined,
       location: location || undefined,
       days: days,
+      courtCount: courtCount,
       estimatedRounds: calculateEstimatedRounds(days)
     });
     onClose();
@@ -128,6 +131,45 @@ export function TournamentSettingsModal({
                   </div>
                   <div className="text-xs text-green-600">
                     Günde 90 dakika = 3 tur (30 dk/maç)
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Saha Sayısı Seçimi */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4">
+            <label className="block text-sm font-medium text-blue-800 mb-2">
+              🏟️ Saha Sayısı
+            </label>
+            <p className="text-xs text-blue-600 mb-3">
+              Turnuvada kaç saha kullanılacak?
+            </p>
+            <div className="grid grid-cols-5 gap-2">
+              {[1, 2, 3, 4, 5].map((courtOption) => (
+                <button
+                  key={courtOption}
+                  type="button"
+                  onClick={() => setCourtCount(courtOption)}
+                  className={`px-4 py-3 rounded-xl font-semibold transition-all ${
+                    courtCount === courtOption
+                      ? 'bg-blue-600 text-white shadow-lg scale-105'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                >
+                  {courtOption}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 bg-white border border-blue-200 rounded-xl p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 text-lg">⏱️</span>
+                <div className="text-sm text-blue-700">
+                  <div className="font-semibold mb-1">
+                    {courtCount} saha ile daha hızlı oyun
+                  </div>
+                  <div className="text-xs text-blue-600">
+                    Daha fazla saha = Daha kısa tur süresi
                   </div>
                 </div>
               </div>

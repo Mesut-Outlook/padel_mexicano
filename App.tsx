@@ -53,18 +53,19 @@ export default function App() {
         isAdmin={isAdmin()}
         userName={user.name}
         savedTournaments={savedTournaments}
-        onJoinTournament={(normalizedId, days, tournamentName) => {
+        onJoinTournament={(normalizedId, days, tournamentName, courtCount) => {
           const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 10);
           setSavedTournaments(updatedTournaments);
           localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
           
-          // Gün sayısını ve turnuva ismini localStorage'a kaydet (yeni turnuva oluşturuluyorsa)
+          // Tüm turnuva ayarlarını localStorage'a kaydet (yeni turnuva oluşturuluyorsa)
           if (days && isAdmin()) {
             const roundsPerDay = 3; // 90 dakika / 30 dakika = 3 tur/gün
             const tournamentSettings = {
               id: normalizedId,
               name: tournamentName || undefined,
               days: days,
+              courtCount: courtCount || 2,
               estimatedRounds: days * roundsPerDay,
               createdAt: new Date().toISOString()
             };
@@ -154,11 +155,17 @@ function TournamentApp({
         setTournamentSettings({
           name: parsed.name,
           days: parsed.days,
+          courtCount: parsed.courtCount,
           estimatedRounds: parsed.estimatedRounds,
           startDate: parsed.startDate,
           endDate: parsed.endDate,
           location: parsed.location
         });
+        
+        // Eğer settings'te courtCount varsa ve Firebase'den gelen veriyle farklıysa, settings'teki değeri kullan
+        if (parsed.courtCount && parsed.courtCount !== courtCount) {
+          setCourtCount(parsed.courtCount);
+        }
       } catch (error) {
         console.error('Tournament settings parse error:', error);
       }
@@ -1648,6 +1655,14 @@ function TournamentApp({
         currentSettings={tournamentSettings}
         onSave={(settings) => {
           setTournamentSettings(settings);
+          
+          // Saha sayısını güncelle
+          if (settings.courtCount !== undefined) {
+            setCourtCount(settings.courtCount);
+            // Firebase'e de kaydet
+            persistTournamentState({ courtCount: settings.courtCount });
+          }
+          
           // localStorage'a kaydet
           const savedSettings = localStorage.getItem(`tournament-settings-${tournamentId}`);
           let currentData = {};
