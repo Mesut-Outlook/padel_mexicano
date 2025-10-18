@@ -243,7 +243,7 @@ function TournamentApp({
     });
   };
 
-  // Debounced persist fonksiyonu - skor değişikliklerini 500ms sonra kaydeder
+  // Debounced persist fonksiyonu - skor değişikliklerini 1000ms sonra kaydeder
   const debouncedPersist = useCallback((patch: TournamentStatePatch) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -251,7 +251,7 @@ function TournamentApp({
     
     debounceTimerRef.current = setTimeout(() => {
       persistTournamentState(patch);
-    }, 500); // 500ms bekle, ardışık değişiklikleri birleştir
+    }, 1000); // 1 saniye bekle, daha az API çağrısı
   }, [players, playerPool, rounds, totals, byeCounts, courtCount, updateTournament]);
 
   const queueCopyFeedbackReset = () => {

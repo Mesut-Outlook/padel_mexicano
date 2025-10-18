@@ -93,23 +93,6 @@ export function TournamentJoinForm({
                 <h2 className="text-lg sm:text-xl font-bold text-green-800">Yeni Turnuva Oluştur</h2>
               </div>
 
-              {/* Turnuva İsmi */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-green-800 mb-2">
-                  🏆 Turnuva İsmi (İsteğe Bağlı)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Örn: 2025 Bahar Kupası"
-                  value={tournamentName}
-                  onChange={(e) => setTournamentName(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-                />
-                <p className="text-xs text-green-700 mt-1.5">
-                  Boş bırakırsanız otomatik ID kullanılır
-                </p>
-              </div>
-
               {/* Gün ve Saha Seçimi */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4">
                 {/* Gün Sayısı */}
@@ -229,6 +212,25 @@ export function TournamentJoinForm({
               </div>
             )}
 
+            {/* Turnuva İsmi (Opsiyonel - Yeni Turnuva için) */}
+            {isAdmin && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-blue-800 mb-2">
+                  🏆 Yeni Turnuva İsmi (İsteğe Bağlı)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: 2025 Bahar Kupası"
+                  value={tournamentName}
+                  onChange={(e) => setTournamentName(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <p className="text-xs text-blue-700 mt-1.5">
+                  Sadece yeni turnuva oluştururken kullanılır. Boş bırakabilirsiniz.
+                </p>
+              </div>
+            )}
+
             {/* Turnuva ID Input ve Katıl Butonu - Yan Yana */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-blue-800 mb-2">
@@ -259,27 +261,6 @@ export function TournamentJoinForm({
                 Turnuva ID'sini girin ve Katıl butonuna basın (veya Enter tuşuna basın)
               </p>
             </div>
-
-            {/* Örnek ID'ler (Sadece Admin) */}
-            {isAdmin && (
-              <div className="mt-4 text-center">
-                <p className="text-xs text-gray-600 mb-2">Test için örnek ID'ler:</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button 
-                    onClick={() => setTournamentId("demo-turnuva")}
-                    className="text-xs bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors"
-                  >
-                    demo-turnuva
-                  </button>
-                  <button 
-                    onClick={() => setTournamentId("test-2024")}
-                    className="text-xs bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors"
-                  >
-                    test-2024
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Loading ve Error */}
