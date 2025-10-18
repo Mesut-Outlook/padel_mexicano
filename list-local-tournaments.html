@@ -1,0 +1,69 @@
+// LocalStorage'dan turnuva bilgilerini listele
+console.log('📋 LocalStorage\'daki Turnuva Bilgileri\n');
+console.log('═'.repeat(80));
+
+// Kayıtlı turnuva ID'leri
+const savedTournaments = localStorage.getItem('mexicano-tournaments');
+if (savedTournaments) {
+  const tournaments = JSON.parse(savedTournaments);
+  console.log(`\n🏆 Kayıtlı Turnuvalar (${tournaments.length}):`);
+  console.log('─'.repeat(80));
+  
+  tournaments.forEach((id, index) => {
+    console.log(`${index + 1}. ${id}`);
+    
+    // Her turnuva için ayarları kontrol et
+    const settingsKey = `tournament-settings-${id}`;
+    const settings = localStorage.getItem(settingsKey);
+    
+    if (settings) {
+      try {
+        const parsed = JSON.parse(settings);
+        console.log(`   📅 Gün Sayısı: ${parsed.days || 'Belirtilmemiş'}`);
+        console.log(`   🌀 Tahmini Tur: ${parsed.estimatedRounds || 'Belirtilmemiş'}`);
+        if (parsed.startDate) console.log(`   📆 Başlangıç: ${parsed.startDate}`);
+        if (parsed.endDate) console.log(`   🏁 Bitiş: ${parsed.endDate}`);
+        if (parsed.location) console.log(`   📍 Yer: ${parsed.location}`);
+        if (parsed.createdAt) console.log(`   🕐 Oluşturulma: ${new Date(parsed.createdAt).toLocaleString('tr-TR')}`);
+        if (parsed.updatedAt) console.log(`   🔄 Güncelleme: ${new Date(parsed.updatedAt).toLocaleString('tr-TR')}`);
+      } catch (e) {
+        console.log(`   ⚠️  Ayarlar okunamadı`);
+      }
+    }
+    console.log('');
+  });
+} else {
+  console.log('\n❌ LocalStorage\'da kayıtlı turnuva bulunamadı.');
+}
+
+// Tüm localStorage anahtarlarını tara
+console.log('\n📦 Tüm Tournament Ayarları:');
+console.log('═'.repeat(80));
+
+let foundSettings = false;
+for (let i = 0; i < localStorage.length; i++) {
+  const key = localStorage.key(i);
+  if (key && key.startsWith('tournament-settings-')) {
+    foundSettings = true;
+    const tournamentId = key.replace('tournament-settings-', '');
+    const settings = localStorage.getItem(key);
+    
+    console.log(`\n🏆 ${tournamentId}`);
+    console.log('─'.repeat(80));
+    
+    if (settings) {
+      try {
+        const parsed = JSON.parse(settings);
+        console.log(JSON.stringify(parsed, null, 2));
+      } catch (e) {
+        console.log('⚠️  Parse hatası');
+      }
+    }
+  }
+}
+
+if (!foundSettings) {
+  console.log('\n❌ Hiç turnuva ayarı bulunamadı.');
+}
+
+console.log('\n' + '═'.repeat(80));

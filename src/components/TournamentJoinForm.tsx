@@ -4,7 +4,7 @@ interface TournamentJoinFormProps {
   isAdmin: boolean;
   userName: string;
   savedTournaments: string[];
-  onJoinTournament: (tournamentId: string, days?: number) => void;
+  onJoinTournament: (tournamentId: string, days?: number, tournamentName?: string) => void;
 }
 
 export function TournamentJoinForm({ 
@@ -14,6 +14,7 @@ export function TournamentJoinForm({
   onJoinTournament 
 }: TournamentJoinFormProps) {
   const [tournamentId, setTournamentId] = useState<string>("");
+  const [tournamentName, setTournamentName] = useState<string>("");
   const [days, setDays] = useState<number>(5);
   const [showDaysInfo, setShowDaysInfo] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
@@ -51,8 +52,8 @@ export function TournamentJoinForm({
     setJoinLoading(true);
     setJoinError(null);
     
-    // Admin için gün sayısını gönder (yeni turnuva)
-    onJoinTournament(newTournamentId, days);
+    // Admin için gün sayısını ve turnuva ismini gönder (yeni turnuva)
+    onJoinTournament(newTournamentId, days, tournamentName || undefined);
     setJoinLoading(false);
   };
 
@@ -116,7 +117,26 @@ export function TournamentJoinForm({
           </div>
 
           {isAdmin && (
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4">
+            <>
+              {/* Turnuva İsmi */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🏆 Yeni Turnuva İsmi (İsteğe Bağlı)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Örn: 2025 Bahar Kupası"
+                  value={tournamentName}
+                  onChange={(e) => setTournamentName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Boş bırakırsanız otomatik ID kullanılır
+                </p>
+              </div>
+
+              {/* Gün Sayısı */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4">
               <label className="block text-sm font-medium text-green-800 mb-2">
                 📅 Yeni Turnuva İçin Gün Sayısı
               </label>
@@ -162,6 +182,7 @@ export function TournamentJoinForm({
                 </div>
               )}
             </div>
+            </>
           )}
 
           {savedTournaments.length > 0 && (

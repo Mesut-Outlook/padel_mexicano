@@ -8,6 +8,7 @@ interface TournamentSettingsModalProps {
 }
 
 export interface TournamentSettings {
+  name?: string;
   days?: number;
   estimatedRounds?: number;
   startDate?: string;
@@ -21,6 +22,7 @@ export function TournamentSettingsModal({
   onSave,
   currentSettings
 }: TournamentSettingsModalProps) {
+  const [name, setName] = useState(currentSettings?.name || '');
   const [startDate, setStartDate] = useState(currentSettings?.startDate || '');
   const [endDate, setEndDate] = useState(currentSettings?.endDate || '');
   const [location, setLocation] = useState(currentSettings?.location || '');
@@ -36,6 +38,7 @@ export function TournamentSettingsModal({
 
   const handleSave = () => {
     onSave({
+      name: name || undefined,
       startDate: startDate || undefined,
       endDate: endDate || undefined,
       location: location || undefined,
@@ -75,6 +78,23 @@ export function TournamentSettingsModal({
         </div>
 
         <div className="space-y-5">
+          {/* Turnuva İsmi */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              🏆 Turnuva İsmi
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Örn: 2025 Bahar Kupası"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Turnuvanıza özel bir isim verin (İsteğe bağlı)
+            </p>
+          </div>
+
           {/* Gün Sayısı Seçimi */}
           <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4">
             <label className="block text-sm font-medium text-green-800 mb-2">

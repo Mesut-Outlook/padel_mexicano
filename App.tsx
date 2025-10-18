@@ -53,16 +53,17 @@ export default function App() {
         isAdmin={isAdmin()}
         userName={user.name}
         savedTournaments={savedTournaments}
-        onJoinTournament={(normalizedId, days) => {
+        onJoinTournament={(normalizedId, days, tournamentName) => {
           const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 10);
           setSavedTournaments(updatedTournaments);
           localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
           
-          // Gün sayısını localStorage'a kaydet (yeni turnuva oluşturuluyorsa)
+          // Gün sayısını ve turnuva ismini localStorage'a kaydet (yeni turnuva oluşturuluyorsa)
           if (days && isAdmin()) {
             const roundsPerDay = 3; // 90 dakika / 30 dakika = 3 tur/gün
             const tournamentSettings = {
               id: normalizedId,
+              name: tournamentName || undefined,
               days: days,
               estimatedRounds: days * roundsPerDay,
               createdAt: new Date().toISOString()
@@ -151,6 +152,9 @@ function TournamentApp({
       try {
         const parsed = JSON.parse(savedSettings);
         setTournamentSettings({
+          name: parsed.name,
+          days: parsed.days,
+          estimatedRounds: parsed.estimatedRounds,
           startDate: parsed.startDate,
           endDate: parsed.endDate,
           location: parsed.location
@@ -860,8 +864,15 @@ function TournamentApp({
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                 <div className="space-y-2">
                   <span className="text-xs uppercase tracking-[0.35em] text-white/70">Aktif Turnuva</span>
-                  <div className="text-2xl md:text-4xl font-black leading-tight break-words">
-                    {tournamentId || "Turnuva ID'si seçilmedi"}
+                  <div className="space-y-1">
+                    {tournamentSettings.name && (
+                      <div className="text-2xl md:text-3xl font-black leading-tight break-words">
+                        🏆 {tournamentSettings.name}
+                      </div>
+                    )}
+                    <div className={`${tournamentSettings.name ? 'text-lg md:text-xl' : 'text-2xl md:text-4xl'} font-black leading-tight break-words ${tournamentSettings.name ? 'text-white/80' : ''}`}>
+                      {tournamentId || "Turnuva ID'si seçilmedi"}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-3 text-sm text-white/80">
                     <div className="flex items-center gap-1">
