@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { usePrismaTournament } from "./src/hooks/usePrismaTournament";
 import { useAuth } from "./src/hooks/useAuth";
 import { LoginForm } from "./src/components/LoginForm";
@@ -144,6 +144,7 @@ function TournamentApp({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tournamentSettings, setTournamentSettings] = useState<TournamentSettings>({});
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toKey = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
 
   // Turnuva ayarlarını yükle
@@ -200,6 +201,9 @@ function TournamentApp({
       if (copyFeedbackTimeoutRef.current) {
         clearTimeout(copyFeedbackTimeoutRef.current);
       }
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
     };
   }, []);
 
@@ -238,6 +242,17 @@ function TournamentApp({
       currentRound: nextRounds.length
     });
   };
+
+  // Debounced persist fonksiyonu - skor değişikliklerini 500ms sonra kaydeder
+  const debouncedPersist = useCallback((patch: TournamentStatePatch) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
+      persistTournamentState(patch);
+    }, 500); // 500ms bekle, ardışık değişiklikleri birleştir
+  }, [players, playerPool, rounds, totals, byeCounts, courtCount, updateTournament]);
 
   const queueCopyFeedbackReset = () => {
     if (copyFeedbackTimeoutRef.current) {
@@ -734,7 +749,12 @@ function TournamentApp({
       copy.matches[matchIndex] = m;
       return copy;
     });
-    persistTournamentState({ rounds: newRounds });
+    
+    // Önce state'i güncelle (hızlı UI response için)
+    setRounds(newRounds);
+    
+    // Sonra persist işlemini debounce ile yap (arka planda)
+    debouncedPersist({ rounds: newRounds });
   }
 
   function submitRound(roundIndex: number) {
