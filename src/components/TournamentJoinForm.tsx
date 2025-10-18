@@ -229,31 +229,36 @@ export function TournamentJoinForm({
               </div>
             )}
 
-            {/* Turnuva ID Input */}
+            {/* Turnuva ID Input ve Katıl Butonu - Yan Yana */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-blue-800 mb-2">
                 🔑 Turnuva ID
               </label>
-              <input
-                type="text"
-                placeholder="Örn: turnuva-2025-10-14-abc123"
-                value={tournamentId}
-                onChange={(e) => setTournamentId(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              />
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <input
+                  type="text"
+                  placeholder="Örn: turnuva-2025-10-14-abc123"
+                  value={tournamentId}
+                  onChange={(e) => setTournamentId(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && tournamentId.trim() && !joinLoading) {
+                      handleJoin();
+                    }
+                  }}
+                  className="flex-1 px-4 py-3 border-2 border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <button
+                  onClick={handleJoin}
+                  disabled={!tournamentId.trim() || joinLoading}
+                  className="sm:w-auto whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-6 rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 disabled:bg-gray-300 disabled:from-gray-300 disabled:to-gray-300 transition-all shadow-lg"
+                >
+                  {joinLoading && !isCreatingNew ? "Katılıyor..." : "🚀 Katıl"}
+                </button>
+              </div>
               <p className="text-xs text-blue-700 mt-1.5">
-                Turnuva ID'sini girerek mevcut bir turnuvaya katılabilirsiniz
+                Turnuva ID'sini girin ve Katıl butonuna basın (veya Enter tuşuna basın)
               </p>
             </div>
-
-            {/* Katıl Butonu */}
-            <button
-              onClick={handleJoin}
-              disabled={!tournamentId.trim() || joinLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-6 rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 disabled:bg-gray-300 disabled:from-gray-300 disabled:to-gray-300 transition-all shadow-lg"
-            >
-              {joinLoading && !isCreatingNew ? "Katılıyor..." : "🚀 Turnuvaya Katıl"}
-            </button>
 
             {/* Örnek ID'ler (Sadece Admin) */}
             {isAdmin && (
