@@ -1129,81 +1129,119 @@ function TournamentApp({
                   🏆 Turnuva Planlama
                 </h3>
                 
-                {/* Gün bazlı planlama bilgisi */}
-                {plannedDays && (
-                  <div className="bg-blue-100 border border-blue-300 rounded-lg p-3 mb-3">
-                    <div className="flex items-center justify-between">
+                {/* Gün Bazlı İlerleme Kartı */}
+                {plannedDays && estimatedRounds && currentDay && roundsToday !== null ? (
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-5">
+                    {/* Ana Başlık */}
+                    <div className="flex items-center justify-between mb-4">
                       <div>
-                        <span className="font-semibold text-blue-900">
-                          📅 {plannedDays} günlük plan
-                        </span>
-                        <span className="text-blue-700 ml-2">
-                          (Günlük 90 dk = 3 tur/gün)
-                        </span>
+                        <h4 className="text-xl font-bold text-blue-900">
+                          📅 Gün {currentDay}/{plannedDays}
+                        </h4>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Tur {currentRounds}/{estimatedRounds} (%{Math.round((currentRounds / estimatedRounds) * 100)})
+                        </p>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm font-medium text-blue-700">
-                          Şu an: {currentDay}. gün
+                        <div className="text-3xl font-bold text-blue-600">
+                          {roundsToday}/{roundsPerDay}
                         </div>
                         <div className="text-xs text-blue-600">
-                          Bugün {roundsToday}/{roundsPerDay} tur tamamlandı
+                          Bugün tamamlanan
                         </div>
                       </div>
                     </div>
-                    {estimatedRounds && (
-                      <div className="mt-2 text-sm text-blue-700">
-                        💡 Planlanan: <span className="font-semibold">{estimatedRounds} tur</span>
-                        {calc.optimalRounds !== estimatedRounds && (
-                          <span className="ml-2">
-                            (Eşit dağılım için {calc.optimalRounds} tur önerilir)
-                          </span>
-                        )}
+
+                    {/* Ana İlerleme Çubuğu */}
+                    <div className="mb-3">
+                      <div className="flex justify-between text-xs text-blue-700 mb-1">
+                        <span>Genel İlerleme</span>
+                        <span className="font-semibold">%{Math.round((currentRounds / estimatedRounds) * 100)}</span>
                       </div>
-                    )}
+                      <div className="w-full bg-blue-200 rounded-full h-4 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-blue-500 to-indigo-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                          style={{width: `${Math.min(100, (currentRounds / estimatedRounds) * 100)}%`}}
+                        >
+                          {currentRounds > 0 && (
+                            <span className="text-xs text-white font-semibold">
+                              {currentRounds}/{estimatedRounds}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Günlük İlerleme */}
+                    <div className="bg-white/70 rounded-lg p-3 mb-3">
+                      <div className="flex justify-between text-xs text-blue-700 mb-1">
+                        <span>📍 Bugünün İlerlemesi</span>
+                        <span className="font-semibold">%{Math.round((roundsToday / roundsPerDay) * 100)}</span>
+                      </div>
+                      <div className="w-full bg-blue-100 rounded-full h-2.5 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-green-400 to-green-600 h-2.5 rounded-full transition-all duration-500"
+                          style={{width: `${(roundsToday / roundsPerDay) * 100}%`}}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-2">
+                        {roundsToday === roundsPerDay 
+                          ? "✅ Bugünün turu tamamlandı!" 
+                          : `⏳ ${roundsPerDay - roundsToday} tur daha kaldı (90 dk = 3 tur/gün)`}
+                      </p>
+                    </div>
+
+                    {/* Ek Bilgiler */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <div className="text-blue-600 text-xs">Kalan Gün</div>
+                        <div className="text-blue-900 font-bold text-lg">
+                          {Math.max(0, plannedDays - currentDay)} gün
+                        </div>
+                      </div>
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <div className="text-blue-600 text-xs">Kalan Tur</div>
+                        <div className="text-blue-900 font-bold text-lg">
+                          {Math.max(0, estimatedRounds - currentRounds)} tur
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Planlama Olmadan - Basit Görünüm */
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <div className="font-medium text-blue-700">Önerilen Tur</div>
+                      <div className="text-lg font-bold text-blue-900">
+                        {calc.optimalRounds} Tur
+                      </div>
+                      <div className="text-blue-600">
+                        Oyuncu başına ~{calc.matchesPerPlayer} maç
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-blue-700">Mevcut Durum</div>
+                      <div className="text-lg font-bold text-blue-900">
+                        {currentRounds}/{calc.optimalRounds} Tur
+                      </div>
+                      <div className="text-blue-600">
+                        {remaining > 0 ? `${remaining} tur daha önerilen` : "Hedef tamamlandı!"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-blue-700">İlerleme</div>
+                      <div className="w-full bg-blue-200 rounded-full h-3 mt-2">
+                        <div 
+                          className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                          style={{width: `${Math.round(progress)}%`}}
+                        ></div>
+                      </div>
+                      <div className="text-blue-800 font-medium mt-1">
+                        %{Math.round(progress)}
+                      </div>
+                    </div>
                   </div>
                 )}
-                
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <div className="font-medium text-blue-700">Eşit Dağılım İçin</div>
-                    <div className="text-lg font-bold text-blue-900">
-                      {calc.optimalRounds} Tur
-                    </div>
-                    <div className="text-blue-600">
-                      Oyuncu başına ~{calc.matchesPerPlayer} maç
-                    </div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-blue-700">Mevcut Durum</div>
-                    <div className="text-lg font-bold text-blue-900">
-                      {currentRounds}/{plannedDays ? estimatedRounds : calc.optimalRounds} Tur
-                    </div>
-                    <div className="text-blue-600">
-                      {remaining > 0 ? `${remaining} tur daha önerilen` : "Hedef tamamlandı!"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-blue-700">Süre Tahmini</div>
-                    <div className="text-lg font-bold text-blue-900">
-                      {calc.timePerRound} dk/tur
-                    </div>
-                    <div className="text-blue-600">
-                      Toplam: ~{Math.floor(calc.totalTime / 60)}s {calc.totalTime % 60}dk
-                    </div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-blue-700">İlerleme</div>
-                    <div className="w-full bg-blue-200 rounded-full h-3 mt-2">
-                      <div 
-                        className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                        style={{width: `${Math.round(progress)}%`}}
-                      ></div>
-                    </div>
-                    <div className="text-blue-800 font-medium mt-1">
-                      %{Math.round(progress)}
-                    </div>
-                  </div>
-                </div>
                 <div className="mt-3 text-xs text-blue-600">
                   💡 {calc.matchesPerRound} maç/tur × {courtCount} saha = {calc.timePerRound} dk (maç başına 30dk)
                 </div>
