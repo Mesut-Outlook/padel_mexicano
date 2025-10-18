@@ -114,6 +114,55 @@ export function AdminTournamentDashboard({
     }
   };
 
+  const deleteAllTournaments = () => {
+    const confirmMessage = `⚠️ UYARI: TÜM TURNUVALARI SİLMEK ÜZERE SİNİZ!\n\n` +
+      `Toplam ${tournaments.length} turnuva silinecek:\n` +
+      `- ${activeTournaments.length} aktif turnuva\n` +
+      `- ${completedTournaments.length} tamamlanmış turnuva\n\n` +
+      `Bu işlem GERİ ALINAMAZ!\n\n` +
+      `Devam etmek istediğinizden emin misiniz?`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    // Çift onay
+    const secondConfirm = window.prompt(
+      `Son onay için "SİL" yazın (büyük harflerle):`,
+      ''
+    );
+
+    if (secondConfirm !== 'SİL') {
+      alert('❌ İşlem iptal edildi.');
+      return;
+    }
+
+    try {
+      // Tüm turnuva verilerini sil
+      const savedTournaments = localStorage.getItem('mexicano-tournaments');
+      if (savedTournaments) {
+        const tournamentIds = JSON.parse(savedTournaments) as string[];
+        
+        // Her turnuvanın verilerini sil
+        tournamentIds.forEach(id => {
+          localStorage.removeItem(`mexicano-${id}`);
+          localStorage.removeItem(`tournament-settings-${id}`);
+        });
+      }
+      
+      // Turnuva listesini temizle
+      localStorage.removeItem('mexicano-tournaments');
+      
+      // State'i güncelle
+      setTournaments([]);
+      
+      alert(`✅ Tüm turnuvalar başarıyla silindi!\n\nToplam ${tournaments.length} turnuva temizlendi.`);
+    } catch (error) {
+      console.error('Turnuvalar silinirken hata:', error);
+      alert('❌ Turnuvalar silinirken bir hata oluştu!');
+    }
+  };
+
   const activeTournaments = tournaments.filter(t => 
     t.estimatedRounds === 0 || t.currentRound < t.estimatedRounds
   );
@@ -149,12 +198,23 @@ export function AdminTournamentDashboard({
                 Hoş geldin, <span className="font-semibold text-blue-600">{userName}</span> 👤
               </p>
             </div>
-            <button
-              onClick={onLogout}
-              className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium"
-            >
-              🚪 Çıkış Yap
-            </button>
+            <div className="flex items-center gap-3">
+              {tournaments.length > 0 && (
+                <button
+                  onClick={deleteAllTournaments}
+                  className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium border-2 border-red-200 hover:border-red-300"
+                  title="Tüm turnuvaları sil"
+                >
+                  🗑️ Tümünü Sil
+                </button>
+              )}
+              <button
+                onClick={onLogout}
+                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium"
+              >
+                🚪 Çıkış Yap
+              </button>
+            </div>
           </div>
         </div>
 
