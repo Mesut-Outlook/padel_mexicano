@@ -75,22 +75,22 @@ export function TournamentJoinForm({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-md">
-        <h1 className="text-2xl sm:text-3xl font-bold text-center mb-4 text-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 w-full max-w-2xl max-h-[95vh] overflow-y-auto">
+        <h1 className="text-xl sm:text-2xl font-bold text-center mb-3 text-gray-800">
           🏸 Mexicano Padel
         </h1>
         
         {/* Kullanıcı Bilgisi */}
-        <div className="mb-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full">
-            <span className="text-sm font-medium text-blue-700">
+        <div className="mb-4 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-full">
+            <span className="text-xs sm:text-sm font-medium text-blue-700">
               {isAdmin ? "👤 Admin" : "🎾 Oyuncu"}: {userName}
             </span>
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {isAdmin ? "Mevcut Turnuva ID'si" : "Turnuva ID'si"}
@@ -136,92 +136,95 @@ export function TournamentJoinForm({
                 </p>
               </div>
 
-              {/* Gün Sayısı */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4">
-              <label className="block text-sm font-medium text-green-800 mb-2">
-                📅 Yeni Turnuva İçin Gün Sayısı
-              </label>
-              <p className="text-xs text-green-600 mb-3">
-                Bu ayar sadece "Yeni Turnuva Oluştur" ile kullanılır
-              </p>
-              <div className="grid grid-cols-5 gap-2">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((dayOption) => (
-                  <button
-                    key={dayOption}
-                    type="button"
-                    onClick={() => {
-                      setDays(dayOption);
-                      setShowDaysInfo(true);
-                      setTimeout(() => setShowDaysInfo(false), 3000);
-                    }}
-                    className={`px-4 py-3 rounded-xl font-semibold transition-all ${
-                      days === dayOption
-                        ? 'bg-green-600 text-white shadow-lg scale-105'
-                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                    }`}
-                  >
-                    {dayOption}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 bg-white border border-green-200 rounded-xl p-3">
-                <div className="flex items-start gap-2">
-                  <span className="text-green-600 text-lg">💡</span>
-                  <div className="text-sm text-green-700">
-                    <div className="font-semibold mb-1">
-                      {days} gün = Tahmini {calculateEstimatedRounds(days)} tur
-                    </div>
-                    <div className="text-xs text-green-600">
-                      Günde 90 dakika = 3 tur (30 dk/maç)
+              {/* Gün ve Saha Seçimi - Responsive Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                {/* Gün Sayısı */}
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-3 sm:p-4">
+                  <label className="block text-xs sm:text-sm font-medium text-green-800 mb-1.5 sm:mb-2">
+                    📅 Gün Sayısı
+                  </label>
+                  <p className="text-xs text-green-600 mb-2 hidden sm:block">
+                    Yeni turnuva süresi
+                  </p>
+                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((dayOption) => (
+                      <button
+                        key={dayOption}
+                        type="button"
+                        onClick={() => {
+                          setDays(dayOption);
+                          setShowDaysInfo(true);
+                          setTimeout(() => setShowDaysInfo(false), 3000);
+                        }}
+                        className={`px-2 py-2 sm:px-3 sm:py-2.5 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base transition-all ${
+                          days === dayOption
+                            ? 'bg-green-600 text-white shadow-lg scale-105'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                        }`}
+                      >
+                        {dayOption}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 sm:mt-3 bg-white border border-green-200 rounded-lg sm:rounded-xl p-2 sm:p-3">
+                    <div className="flex items-start gap-1.5 sm:gap-2">
+                      <span className="text-green-600 text-base sm:text-lg">💡</span>
+                      <div className="text-xs sm:text-sm text-green-700">
+                        <div className="font-semibold">
+                          {days} gün = ~{calculateEstimatedRounds(days)} tur
+                        </div>
+                        <div className="text-xs text-green-600 hidden sm:block">
+                          Günde 90 dk = 3 tur (30 dk/maç)
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  {showDaysInfo && (
+                    <div className="mt-1.5 text-xs text-green-600 font-medium animate-pulse">
+                      ✓ {days} günlük turnuva hazır
+                    </div>
+                  )}
                 </div>
-              </div>
-              {showDaysInfo && (
-                <div className="mt-2 text-xs text-green-600 font-medium animate-pulse">
-                  ✓ {days} günlük turnuva hazır
-                </div>
-              )}
-            </div>
 
-            {/* Saha Sayısı */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4">
-              <label className="block text-sm font-medium text-blue-800 mb-2">
-                🏟️ Saha Sayısı
-              </label>
-              <p className="text-xs text-blue-600 mb-3">
-                Turnuvada kaç saha kullanılacak?
-              </p>
-              <div className="grid grid-cols-5 gap-2">
-                {[1, 2, 3, 4, 5].map((courtOption) => (
-                  <button
-                    key={courtOption}
-                    type="button"
-                    onClick={() => setCourtCount(courtOption)}
-                    className={`px-4 py-3 rounded-xl font-semibold transition-all ${
-                      courtCount === courtOption
-                        ? 'bg-blue-600 text-white shadow-lg scale-105'
-                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                    }`}
-                  >
-                    {courtOption}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 bg-white border border-blue-200 rounded-xl p-3">
-                <div className="flex items-start gap-2">
-                  <span className="text-blue-600 text-lg">⏱️</span>
-                  <div className="text-sm text-blue-700">
-                    <div className="font-semibold mb-1">
-                      {courtCount} saha seçildi
-                    </div>
-                    <div className="text-xs text-blue-600">
-                      Daha fazla saha = Daha hızlı oyun akışı
+                {/* Saha Sayısı */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-3 sm:p-4">
+                  <label className="block text-xs sm:text-sm font-medium text-blue-800 mb-1.5 sm:mb-2">
+                    🏟️ Saha Sayısı
+                  </label>
+                  <p className="text-xs text-blue-600 mb-2 hidden sm:block">
+                    Kaç saha kullanılacak?
+                  </p>
+                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                    {[1, 2, 3, 4, 5].map((courtOption) => (
+                      <button
+                        key={courtOption}
+                        type="button"
+                        onClick={() => setCourtCount(courtOption)}
+                        className={`px-2 py-2 sm:px-3 sm:py-2.5 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base transition-all ${
+                          courtCount === courtOption
+                            ? 'bg-blue-600 text-white shadow-lg scale-105'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                        }`}
+                      >
+                        {courtOption}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 sm:mt-3 bg-white border border-blue-200 rounded-lg sm:rounded-xl p-2 sm:p-3">
+                    <div className="flex items-start gap-1.5 sm:gap-2">
+                      <span className="text-blue-600 text-base sm:text-lg">⏱️</span>
+                      <div className="text-xs sm:text-sm text-blue-700">
+                        <div className="font-semibold">
+                          {courtCount} saha seçildi
+                        </div>
+                        <div className="text-xs text-blue-600 hidden sm:block">
+                          Daha fazla saha = Hızlı akış
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
             </>
           )}
 
