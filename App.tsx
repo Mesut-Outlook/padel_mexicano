@@ -4,6 +4,7 @@ import { useAuth } from "./src/hooks/useAuth";
 import { LoginForm } from "./src/components/LoginForm";
 import { TournamentJoinForm } from "./src/components/TournamentJoinForm";
 import { TournamentSettingsModal, TournamentSettings } from "./src/components/TournamentSettingsModal";
+import { AdminTournamentDashboard } from "./src/components/AdminTournamentDashboard";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
 // After removing required BYEs to make players divisible by 4, pair as:
@@ -15,6 +16,7 @@ export default function App() {
   const { user, logout, isAdmin, login } = useAuth();
   const [tournamentId, setTournamentId] = useState<string>("");
   const [showJoinForm, setShowJoinForm] = useState(true);
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [savedTournaments, setSavedTournaments] = useState<string[]>(() => {
     // Local storage'dan kayıtlı turnuvaları al
     const saved = localStorage.getItem('mexicano-tournaments');
@@ -26,15 +28,33 @@ export default function App() {
     return <LoginForm onLogin={login} />;
   }
 
-  // Turnuva seçilmediyse join formu göster
-  if (showJoinForm) {
+  // Admin ise ve turnuva seçilmemişse dashboard göster
+  if (isAdmin() && showJoinForm && !showAdminDashboard) {
+    return (
+      <AdminTournamentDashboard
+        userName={user.name}
+        onSelectTournament={(selectedId) => {
+          setTournamentId(selectedId);
+          setShowJoinForm(false);
+          setShowAdminDashboard(false);
+        }}
+        onCreateNew={() => {
+          setShowAdminDashboard(true);
+        }}
+        onLogout={logout}
+      />
+    );
+  }
+
+  // Admin yeni turnuva oluşturuyor
+  if (isAdmin() && showAdminDashboard) {
     return (
       <TournamentJoinForm
         isAdmin={isAdmin()}
         userName={user.name}
         savedTournaments={savedTournaments}
         onJoinTournament={(normalizedId, days) => {
-          const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 5);
+          const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 10);
           setSavedTournaments(updatedTournaments);
           localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
           
@@ -49,6 +69,26 @@ export default function App() {
             };
             localStorage.setItem(`tournament-settings-${normalizedId}`, JSON.stringify(tournamentSettings));
           }
+          
+          setTournamentId(normalizedId);
+          setShowJoinForm(false);
+          setShowAdminDashboard(false);
+        }}
+      />
+    );
+  }
+
+  // Oyuncu için turnuva seçimi
+  if (!isAdmin() && showJoinForm) {
+    return (
+      <TournamentJoinForm
+        isAdmin={isAdmin()}
+        userName={user.name}
+        savedTournaments={savedTournaments}
+        onJoinTournament={(normalizedId) => {
+          const updatedTournaments = [normalizedId, ...savedTournaments.filter(t => t !== normalizedId)].slice(0, 5);
+          setSavedTournaments(updatedTournaments);
+          localStorage.setItem('mexicano-tournaments', JSON.stringify(updatedTournaments));
           
           setTournamentId(normalizedId);
           setShowJoinForm(false);
