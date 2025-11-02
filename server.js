@@ -281,7 +281,5 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Start server
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+// Vercel'in sunucusuz ortamı için app'i dışa aktar
+export default app;

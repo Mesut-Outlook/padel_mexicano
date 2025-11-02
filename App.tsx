@@ -102,9 +102,16 @@ export default function App() {
   return <TournamentApp 
     tournamentId={tournamentId}
     user={user}
-    onLogout={logout}
+    onLogout={() => {
+      // Turnuva ID'sini ve session bilgilerini temizle
+      setTournamentId("");
+      setShowJoinForm(true);
+      setShowAdminDashboard(false);
+      logout();
+    }}
     isAdmin={isAdmin()}
     onBackToDashboard={() => {
+      setTournamentId("");
       setShowJoinForm(true);
       setShowAdminDashboard(false);
     }}

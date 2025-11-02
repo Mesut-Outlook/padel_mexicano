@@ -15,8 +15,8 @@ export function useAuth() {
   const USER_STORAGE_KEY = 'padel-mexicano-user';
   const PLAYERS_STORAGE_KEY = 'padel-mexicano-players';
 
-  // Admin bilgileri
-  const ADMIN_PASSWORD = '12345678';
+  // Admin şifresi
+  const ADMIN_PASSWORD = 'Padel123!';
 
   useEffect(() => {
     // Uygulama açıldığında kayıtlı kullanıcıyı kontrol et

@@ -61,6 +61,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={isAdminLogin ? "admin" : "İsminizi girin"}
+              autoComplete="off"
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
@@ -76,6 +77,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Şifrenizi girin"
+                autoComplete="new-password"
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
