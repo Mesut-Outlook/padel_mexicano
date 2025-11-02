@@ -1,4 +1,4 @@
-// Script to list all active tournaments from Firebase
+// Script: Firebase'den AKTİF turnuvaları listele
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, get } from 'firebase/database';
 
@@ -12,99 +12,76 @@ const firebaseConfig = {
   appId: "1:123456789:web:abcdef123456789"
 };
 
-// Firebase'i başlat
+// Firebase
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
+
+function isActiveTournament(data) {
+  const completedFlag = data?.completed === true || data?.status === 'completed';
+  const rounds = Array.isArray(data?.rounds) ? data.rounds : [];
+  const submittedRounds = rounds.filter(r => r?.submitted).length;
+  const estimatedRounds =
+    data?.settings?.estimatedRounds ??
+    data?.estimatedRounds ??
+    null;
+
+  // Tahmini tur sayısı biliniyorsa ona göre, bilinmiyorsa completed flag'e göre karar ver
+  const activeByProgress = estimatedRounds ? submittedRounds < estimatedRounds : true;
+  return !completedFlag && activeByProgress;
+}
 
 async function listAllTournaments() {
   try {
     console.log('🔍 Firebase\'den turnuvalar alınıyor...\n');
-    
+
     const tournamentsRef = ref(database, 'tournaments');
     const snapshot = await get(tournamentsRef);
-    
+
     if (!snapshot.exists()) {
       console.log('❌ Hiç turnuva bulunamadı.');
       return;
     }
-    
+
     const tournaments = snapshot.val();
-    const tournamentList = Object.entries(tournaments);
-    
-    console.log(`✅ Toplam ${tournamentList.length} turnuva bulundu:\n`);
+    const tournamentList = Object.entries(tournaments); // [ [id, data], ... ]
+
+    const active = tournamentList.filter(([_, data]) => isActiveTournament(data));
+
+    console.log(`✅ Aktif turnuva sayısı: ${active.length}\n`);
     console.log('═'.repeat(80));
-    
-    tournamentList.forEach(([id, data], index) => {
-      console.log(`\n${index + 1}. 🏆 ${id}`);
-      console.log('─'.repeat(80));
-      
-      // Oyuncu sayısı
-      const playerCount = data.players?.length || 0;
-      console.log(`👥 Oyuncu Sayısı: ${playerCount}`);
-      
-      if (playerCount > 0) {
-        console.log(`   Oyuncular: ${data.players.join(', ')}`);
+
+    active.forEach(([id, data], index) => {
+      const name = data?.settings?.name || data?.name || id;
+      const playersCount = Array.isArray(data?.players) ? data.players.length : 0;
+      const rounds = Array.isArray(data?.rounds) ? data.rounds : [];
+      const submittedRounds = rounds.filter(r => r?.submitted).length;
+      const estimatedRounds =
+        data?.settings?.estimatedRounds ??
+        data?.estimatedRounds ??
+        '∼';
+
+      const days = data?.settings?.days ?? data?.days ?? '∼';
+      const courts = data?.settings?.courtCount ?? data?.courtCount ?? '∼';
+
+      console.log(`${index + 1}. ${name}`);
+      console.log(`   • ID: ${id}`);
+      console.log(`   • Oyuncu: ${playersCount}`);
+      console.log(`   • Turlar: ${submittedRounds}/${estimatedRounds}`);
+      console.log(`   • Gün: ${days} | Saha: ${courts}`);
+      if (data?.settings?.location) {
+        console.log(`   • Konum: ${data.settings.location}`);
       }
-      
-      // Tur bilgisi
-      const roundCount = data.rounds?.length || 0;
-      console.log(`🌀 Tur Sayısı: ${roundCount}`);
-      
-      if (roundCount > 0) {
-        const submittedRounds = data.rounds.filter(r => r.submitted).length;
-        console.log(`   Tamamlanan: ${submittedRounds}/${roundCount}`);
-      }
-      
-      // Turnuva durumu
-      const isStarted = data.tournamentStarted || false;
-      const status = isStarted 
-        ? (roundCount > 0 ? '🟢 Aktif' : '🟡 Başlatıldı') 
-        : '⚪ Hazırlık';
-      console.log(`📊 Durum: ${status}`);
-      
-      // Saha sayısı
-      const courtCount = data.courtCount || 2;
-      console.log(`🏟️ Saha Sayısı: ${courtCount}`);
-      
-      // Mevcut tur
-      const currentRound = data.currentRound || 0;
-      if (currentRound > 0) {
-        console.log(`📍 Mevcut Tur: ${currentRound}`);
-      }
-      
-      // Havuz oyuncuları
-      const poolCount = data.playerPool?.length || 0;
-      if (poolCount > 0) {
-        console.log(`💼 Havuzda Bekleyen: ${poolCount} oyuncu`);
-      }
-      
-      console.log('─'.repeat(80));
+      console.log('');
     });
-    
-    console.log('\n' + '═'.repeat(80));
-    console.log(`\n📈 İstatistikler:`);
-    console.log(`   • Aktif turnuvalar: ${tournamentList.filter(([_, d]) => d.tournamentStarted).length}`);
-    console.log(`   • Hazırlık aşamasında: ${tournamentList.filter(([_, d]) => !d.tournamentStarted).length}`);
-    
-    const totalPlayers = tournamentList.reduce((sum, [_, d]) => sum + (d.players?.length || 0), 0);
-    console.log(`   • Toplam oyuncu: ${totalPlayers}`);
-    
-    const totalRounds = tournamentList.reduce((sum, [_, d]) => sum + (d.rounds?.length || 0), 0);
-    console.log(`   • Toplam tur: ${totalRounds}`);
-    
-    console.log('');
-    
-  } catch (error) {
-    console.error('❌ Hata:', error.message);
-    
-    if (error.message.includes('PERMISSION_DENIED')) {
-      console.log('\n⚠️  Firebase veritabanı izinleri gerekiyor.');
-      console.log('   Demo modda çalışıyor olabilir.');
+
+    if (active.length === 0) {
+      console.log('ℹ️ Aktif turnuva bulunamadı (tüm turnuvalar tamamlanmış olabilir).');
     }
+  } catch (error) {
+    console.error('🚨 Hata:', error?.message || error);
   } finally {
-    process.exit(0);
+    console.log('🟢 Bitti.');
   }
 }
 
-// Script'i çalıştır
 listAllTournaments();
