@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
 
+interface TournamentInfo {
+  id: string;
+  name?: string;
+  createdAt: string;
+  playerCount?: number;
+}
+
 interface TournamentJoinFormProps {
   isAdmin: boolean;
   userName: string;
@@ -17,10 +24,12 @@ export function TournamentJoinForm({
   const [tournamentName, setTournamentName] = useState<string>("");
   const [days, setDays] = useState<number>(5);
   const [courtCount, setCourtCount] = useState<number>(2);
-  const [showDaysInfo, setShowDaysInfo] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
+  const [browsing, setBrowsing] = useState<boolean>(false);
+  const [availableTournaments, setAvailableTournaments] = useState<TournamentInfo[]>([]);
+  const [loadingTournaments, setLoadingTournaments] = useState<boolean>(false);
 
   // Günlere göre tahmini tur sayısını hesapla
   const calculateEstimatedRounds = (daysCount: number): number => {
@@ -65,6 +74,22 @@ export function TournamentJoinForm({
       setJoinLoading(false);
     } else {
       alert("Lütfen bir turnuva ID'si girin");
+    }
+  };
+
+  // Açık turnuvaları yükle
+  const loadAvailableTournaments = async () => {
+    setLoadingTournaments(true);
+    try {
+      const response = await fetch('/api/tournaments/list');
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableTournaments(data.tournaments || []);
+      }
+    } catch (error) {
+      console.error('Turnuvalar yüklenirken hata:', error);
+    } finally {
+      setLoadingTournaments(false);
     }
   };
 
@@ -124,8 +149,6 @@ export function TournamentJoinForm({
                         type="button"
                         onClick={() => {
                           setDays(dayOption);
-                          setShowDaysInfo(true);
-                          setTimeout(() => setShowDaysInfo(false), 3000);
                         }}
                         className={`px-2 py-2 sm:px-3 sm:py-2.5 rounded-lg font-semibold text-sm sm:text-base transition-all ${
                           days === dayOption
@@ -206,6 +229,86 @@ export function TournamentJoinForm({
                 <p className="text-xs text-orange-700 font-medium">
                   ℹ️ Sadece admin kullanıcılar yeni turnuva oluşturabilir. Katılmak için turnuva ID'sini girin.
                 </p>
+              </div>
+            )}
+
+            {/* Turnuva Tarayıcı Butonu */}
+            <div className="mb-4">
+              <button
+                onClick={() => {
+                  setBrowsing(!browsing);
+                  if (!browsing) {
+                    loadAvailableTournaments();
+                  }
+                }}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-4 rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                <span className="text-lg">🔍</span>
+                <span>{browsing ? "Tarayıcıyı Kapat" : "Açık Turnuvaları Gör"}</span>
+              </button>
+            </div>
+
+            {/* Turnuva Listesi */}
+            {browsing && (
+              <div className="mb-4 bg-white border-2 border-purple-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-purple-800">🏆 Açık Turnuvalar</h3>
+                  <button
+                    onClick={loadAvailableTournaments}
+                    disabled={loadingTournaments}
+                    className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {loadingTournaments ? "⏳" : "🔄 Yenile"}
+                  </button>
+                </div>
+                
+                {loadingTournaments ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                    <span className="ml-2 text-sm text-purple-600">Yükleniyor...</span>
+                  </div>
+                ) : availableTournaments.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    😔 Açık turnuva bulunamadı
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {availableTournaments.map((tournament) => (
+                      <button
+                        key={tournament.id}
+                        onClick={() => {
+                          setTournamentId(tournament.id);
+                          setBrowsing(false);
+                        }}
+                        className="w-full text-left px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 border border-purple-200 rounded-lg transition-all group"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-purple-900 text-sm mb-1 truncate">
+                              {tournament.name || tournament.id}
+                            </div>
+                            <div className="text-xs text-purple-700 space-y-0.5">
+                              <div className="truncate">🔑 ID: {tournament.id}</div>
+                              {tournament.playerCount !== undefined && (
+                                <div>👥 {tournament.playerCount} oyuncu</div>
+                              )}
+                              <div>📅 {new Date(tournament.createdAt).toLocaleDateString('tr-TR', { 
+                                day: 'numeric', 
+                                month: 'short', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}</div>
+                            </div>
+                          </div>
+                          <div className="text-purple-400 group-hover:text-purple-600 transition-colors">
+                            →
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

@@ -117,6 +117,7 @@ app.post('/api/tournaments/:tournamentId', async (req, res) => {
       tournament = await prisma.tournament.create({
         data: {
           tournamentId,
+          name: tournamentData.name, // Turnuva ismini ekle
           courtCount: tournamentData.courtCount || 2,
           tournamentStarted: tournamentData.tournamentStarted,
           currentRound: tournamentData.currentRound,
@@ -127,6 +128,7 @@ app.post('/api/tournaments/:tournamentId', async (req, res) => {
       await prisma.tournament.update({
         where: { id: tournament.id },
         data: {
+          name: tournamentData.name, // Turnuva ismini güncelle
           courtCount: tournamentData.courtCount || 2,
           tournamentStarted: tournamentData.tournamentStarted,
           currentRound: tournamentData.currentRound,
@@ -243,6 +245,33 @@ app.delete('/api/tournaments/:tournamentId', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting tournament:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// List all tournaments
+app.get('/api/tournaments/list', async (req, res) => {
+  try {
+    const tournaments = await prisma.tournament.findMany({
+      include: {
+        players: {
+          include: { player: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const tournamentList = tournaments.map(t => ({
+      id: t.tournamentId,
+      name: t.name || undefined,
+      createdAt: t.createdAt.toISOString(),
+      playerCount: t.players.length,
+      tournamentStarted: t.tournamentStarted
+    }));
+
+    res.json({ tournaments: tournamentList });
+  } catch (error) {
+    console.error('Error listing tournaments:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

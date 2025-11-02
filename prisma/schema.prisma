@@ -14,6 +14,7 @@ datasource db {
 model Tournament {
   id              String   @id @default(cuid())
   tournamentId    String   @unique // Firebase'deki tournamentId
+  name            String?  // Turnuva ismi (opsiyonel)
   courtCount      Int      @default(2)
   tournamentStarted Boolean @default(false)
   currentRound    Int      @default(0)
