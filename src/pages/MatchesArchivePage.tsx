@@ -2,7 +2,7 @@ import React from "react";
 
 export default function MatchesArchivePage({ rounds }: any) {
   // Son tur ve oynanmamış maçlar hariç, diğer tüm turlar
-  const archivedRounds = rounds.slice(0, -1).filter(r => r.matches.every(m => m.scoreA !== undefined && m.scoreB !== undefined));
+  const archivedRounds = rounds.slice(0, -1).filter((r: { matches: { scoreA?: number; scoreB?: number }[] }) => r.matches.every((m: { scoreA?: number; scoreB?: number }) => m.scoreA !== undefined && m.scoreB !== undefined));
   return (
     <div className="max-w-3xl mx-auto p-6 bg-white rounded-2xl shadow mt-8">
       <h1 className="text-2xl font-bold mb-4 text-blue-800">📚 Tamamlanan Turlar ve Maçlar</h1>

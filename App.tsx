@@ -586,30 +586,6 @@ function TournamentApp({
     persistTournamentState({ playerPool: newPool });
   }
 
-  function seededPairs(available: string[]): Array<[[string, string], [string, string]]> {
-    // available is best->worst by ranking
-    const pairs: Array<[[string, string], [string, string]]> = [];
-    const n = available.length;
-    // We will pair (1&n) vs (2&n-1), (3&n-2) vs (4&n-3), ...
-    for (let i = 0; i < n / 4; i++) {
-      const a1 = available[i * 2 + 0];
-      const a2 = available[n - 1 - (i * 2 + 0)];
-      const b1 = available[i * 2 + 1];
-      const b2 = available[n - 1 - (i * 2 + 1)];
-      pairs.push([[a1, a2], [b1, b2]]);
-    }
-    return pairs;
-  }
-
-  function splitTeamPoints(
-    p1: string,
-    p2: string,
-    teamScore: number
-  ): Record<string, number> {
-    // Her oyuncu kendi takımının aldığı gerçek skor sayısını alır
-    return { [p1]: teamScore, [p2]: teamScore };
-  }
-
   async function startTournament() {
     console.log("startTournament called");
     const validation = ensureEvenAtLeastEight();
@@ -679,162 +655,6 @@ function TournamentApp({
     });
   }
 
-  function addNextRound() {
-    if (!ensureEvenAtLeastEight()) return;
-    if (rounds.length === 0) {
-      alert("Önce ilk turu başlatın.");
-      return;
-    }
-
-    const lastRound = rounds[rounds.length - 1];
-    if (!lastRound?.submitted) {
-      alert("Sonraki turu oluşturmadan önce mevcut turdaki tüm maçları tamamlayıp puanları kaydedin.");
-      return;
-    }
-    const nextNo = rounds.length + 1;
-    const ranking = currentRanking();
-
-    // Determine byes for this round based on player count
-    const n = players.length;
-    const byesNeeded = needByesForCount(n);
-    const byes = byesNeeded > 0 ? pickByes(ranking, byesNeeded) : [];
-
-    // Available players for seeded pairing
-    const available = ranking.filter((p) => !byes.includes(p));
-    const pairs = seededPairs(available);
-    const matches: Match[] = pairs.map(([[a1, a2], [b1, b2]]) => ({ teamA: [a1, a2], teamB: [b1, b2] }));
-
-    const newRounds = [
-      ...rounds,
-      { number: nextNo, matches, rankingSnapshot: ranking, byes },
-    ];
-    const updatedByeCounts = (() => {
-      if (!byes.length) return byeCounts;
-      const next = { ...byeCounts } as Record<string, number>;
-      byes.forEach((p) => (next[p] = (next[p] ?? 0) + 1));
-      return next;
-    })();
-
-    persistTournamentState({
-      rounds: newRounds,
-      byeCounts: updatedByeCounts
-    });
-  }
-
-  function updateMatchScore(
-    roundIndex: number,
-    matchIndex: number,
-    data: Partial<Match>
-  ) {
-    const newRounds = rounds.map((r, i) => {
-      if (i !== roundIndex) return r;
-      const copy = { ...r };
-      let m = { ...copy.matches[matchIndex], ...data };
-      
-      // 32'den fazla skor girilmesini engelle
-      if (m.scoreA != null && m.scoreA > 32) m.scoreA = 32;
-      if (m.scoreB != null && m.scoreB > 32) m.scoreB = 32;
-      
-      // Auto-set winner if a valid race-to-32 score is entered
-      if (m.scoreA != null && m.scoreB != null) {
-        if (m.scoreA === 32 && m.scoreB < 32) m.winner = "A";
-        else if (m.scoreB === 32 && m.scoreA < 32) m.winner = "B";
-        else m.winner = undefined; // neither team has exactly 32 or both have 32+
-      }
-      
-      // Skor değişikliğinde zaman damgası (unsaved)
-      m.updatedAt = new Date().toISOString();
-      
-      copy.matches = [...copy.matches];
-      copy.matches[matchIndex] = m;
-      return copy;
-    });
-    
-    // Sadece UI state'i güncelle, kaydı beklet (round kaydedilene kadar)
-    setRounds(newRounds);
-  }
-
-  // Tek bir maçın skorunu anında veritabanına kaydet (round'u kapatmadan)
-  function saveMatchScore(roundIndex: number, matchIndex: number) {
-    const newRounds = rounds.map((r, i) => {
-      if (i !== roundIndex) return r;
-      const copy = { ...r };
-      const m = { ...copy.matches[matchIndex] };
-      // Her iki skor da girilmişse kaydetme zamanı ekle
-      if (m.scoreA != null && m.scoreB != null) {
-        m.savedAt = new Date().toISOString();
-      }
-      copy.matches = [...copy.matches];
-      copy.matches[matchIndex] = m;
-      return copy;
-    });
-    persistTournamentState({ rounds: newRounds });
-  }
-
-  function submitRound(roundIndex: number) {
-    const r = rounds[roundIndex];
-    // validate each match respects race-to-32
-    for (const m of r.matches) {
-      if (m.scoreA == null || m.scoreB == null) {
-        alert("Her maç için skor girilmeli.");
-        return;
-      }
-      if (m.scoreA > 32 || m.scoreB > 32) {
-        alert("Skor 32'den fazla olamaz. Race-to-32 formatında maksimum skor 32'dir.");
-        return;
-      }
-      if (!(m.scoreA === 32 || m.scoreB === 32)) {
-        alert("Race-to-32: Bir takım mutlaka 32 puana ulaşmalı.");
-        return;
-      }
-      if (m.scoreA === 32 && m.scoreB === 32) {
-        alert("Her iki takım da 32 puana ulaşamaz. Sadece kazanan 32 puana ulaşır.");
-        return;
-      }
-      if (m.scoreA < 0 || m.scoreB < 0) {
-        alert("Skorlar negatif olamaz.");
-        return;
-      }
-      // winner auto-detected above; just in case
-      m.winner = m.scoreA === 32 ? "A" : "B";
-    }
-
-    // compute per-player points and update totals based on rankingSnapshot at the start of this round
-    const perPlayerUpdates: Record<string, number> = {};
-
-    r.matches.forEach((m) => {
-      const { teamA, teamB, scoreA = 0, scoreB = 0 } = m;
-      const splitA = splitTeamPoints(
-        teamA[0],
-        teamA[1],
-        scoreA
-      );
-      const splitB = splitTeamPoints(
-        teamB[0],
-        teamB[1],
-        scoreB
-      );
-      const per = { ...splitA, ...splitB };
-      m.perPlayerPoints = per;
-      for (const [name, pts] of Object.entries(per)) {
-        perPlayerUpdates[name] = (perPlayerUpdates[name] ?? 0) + pts;
-      }
-    });
-
-    const newTotals = { ...totals };
-    for (const [n, v] of Object.entries(perPlayerUpdates)) {
-      newTotals[n] = (newTotals[n] ?? 0) + v;
-    }
-
-    const newRounds = [...rounds];
-    newRounds[roundIndex] = { ...r, submitted: true };
-
-    persistTournamentState({
-      totals: newTotals,
-      rounds: newRounds
-    });
-  }
-
   function resetTournament() {
     const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
     const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
@@ -845,6 +665,13 @@ function TournamentApp({
       byeCounts: initialByes
     });
   }
+
+  const toggleRoundCollapse = (roundNumber: number) => {
+    setCollapsedRounds(prev => ({
+      ...prev,
+      [roundNumber]: !prev[roundNumber]
+    }));
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
@@ -982,17 +809,304 @@ function TournamentApp({
         )}
         {activePage === 'main' && (
           <>
-            {/* Sadece son tur ve oynanmamış maçlar ana sayfada gösterilecek */}
             <section className="space-y-6">
+              {/* Son tur - Maç detayları ve skor girişi */}
               {rounds.length > 0 && (() => {
                 const lastRound = rounds[rounds.length - 1];
+                const roundIndex = rounds.length - 1;
                 return (
-                  <div className="bg-white rounded-2xl shadow p-4 mb-6">
-                    <h3 className="text-lg font-semibold mb-2">Son Tur (Tur {lastRound.number})</h3>
-                    {/* ...son turun maçları ve skor girişi kodu... */}
+                  <div className="bg-white rounded-2xl shadow p-6 mb-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-blue-800">🎾 Son Tur (Tur {lastRound.number})</h3>
+                      {lastRound.byes && lastRound.byes.length > 0 && (
+                        <div className="text-sm bg-amber-50 text-amber-700 px-3 py-1 rounded-full">
+                          ⏸️ Bay: {lastRound.byes.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-4">
+                      {lastRound.matches.map((m, mIdx) => (
+                        <div key={mIdx} className="border-2 border-blue-200 rounded-xl p-4 bg-gradient-to-r from-blue-50 to-indigo-50">
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                            {/* Takımlar */}
+                            <div className="flex-1 flex items-center justify-between md:justify-start gap-4">
+                              {/* Takım A */}
+                              <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-lg shadow-sm flex-1">
+                                <span className="text-2xl">🔵</span>
+                                <div>
+                                  <div className="text-xs text-gray-500 uppercase">Takım A</div>
+                                  <div className="font-semibold text-gray-800">
+                                    {m.teamA[0]}
+                                  </div>
+                                  <div className="font-semibold text-gray-800">
+                                    {m.teamA[1]}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="text-2xl font-bold text-gray-400">VS</div>
+                              
+                              {/* Takım B */}
+                              <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-lg shadow-sm flex-1">
+                                <span className="text-2xl">🔴</span>
+                                <div>
+                                  <div className="text-xs text-gray-500 uppercase">Takım B</div>
+                                  <div className="font-semibold text-gray-800">
+                                    {m.teamB[0]}
+                                  </div>
+                                  <div className="font-semibold text-gray-800">
+                                    {m.teamB[1]}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Skor Girişi */}
+                            {isAdmin && !lastRound.submitted && (
+                              <div className="flex items-center gap-3 bg-white px-4 py-3 rounded-lg shadow-sm">
+                                <div className="flex flex-col items-center">
+                                  <label className="text-xs text-gray-500 mb-1">Takım A</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="32"
+                                    value={m.scoreA ?? ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value === '' ? undefined : Math.min(32, Math.max(0, parseInt(e.target.value) || 0));
+                                      const newRounds = [...rounds];
+                                      newRounds[roundIndex].matches[mIdx].scoreA = val;
+                                      if (val === 32 && (m.scoreB ?? 0) < 32) {
+                                        newRounds[roundIndex].matches[mIdx].winner = 'A';
+                                      } else if ((m.scoreB ?? 0) === 32 && val !== undefined && val < 32) {
+                                        newRounds[roundIndex].matches[mIdx].winner = 'B';
+                                      } else {
+                                        newRounds[roundIndex].matches[mIdx].winner = undefined;
+                                      }
+                                      setRounds(newRounds);
+                                    }}
+                                    className="w-16 text-center border-2 border-blue-300 rounded-lg px-2 py-2 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                                <span className="text-2xl font-bold text-gray-400">-</span>
+                                <div className="flex flex-col items-center">
+                                  <label className="text-xs text-gray-500 mb-1">Takım B</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="32"
+                                    value={m.scoreB ?? ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value === '' ? undefined : Math.min(32, Math.max(0, parseInt(e.target.value) || 0));
+                                      const newRounds = [...rounds];
+                                      newRounds[roundIndex].matches[mIdx].scoreB = val;
+                                      if (val === 32 && (m.scoreA ?? 0) < 32) {
+                                        newRounds[roundIndex].matches[mIdx].winner = 'B';
+                                      } else if ((m.scoreA ?? 0) === 32 && val !== undefined && val < 32) {
+                                        newRounds[roundIndex].matches[mIdx].winner = 'A';
+                                      } else {
+                                        newRounds[roundIndex].matches[mIdx].winner = undefined;
+                                      }
+                                      setRounds(newRounds);
+                                    }}
+                                    className="w-16 text-center border-2 border-red-300 rounded-lg px-2 py-2 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-red-500"
+                                  />
+                                </div>
+                                {m.scoreA !== undefined && m.scoreB !== undefined && m.winner && (
+                                  <div className="ml-2">
+                                    <span className="text-2xl">{m.winner === 'A' ? '🏆' : '🏆'}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Sadece skor gösterimi (admin değilse veya submit edilmişse) */}
+                            {(!isAdmin || lastRound.submitted) && m.scoreA !== undefined && m.scoreB !== undefined && (
+                              <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-lg shadow-sm">
+                                <div className="text-center">
+                                  <div className="text-3xl font-bold text-blue-600">{m.scoreA}</div>
+                                </div>
+                                <span className="text-2xl font-bold text-gray-400">-</span>
+                                <div className="text-center">
+                                  <div className="text-3xl font-bold text-red-600">{m.scoreB}</div>
+                                </div>
+                                {m.winner && (
+                                  <span className="text-3xl ml-2">🏆</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Submit butonu - sadece admin için */}
+                    {isAdmin && !lastRound.submitted && (
+                      <div className="mt-6 flex justify-end">
+                        <button
+                          onClick={() => {
+                            const r = lastRound;
+                            // Validation
+                            for (const m of r.matches) {
+                              if (m.scoreA == null || m.scoreB == null) {
+                                alert("Her maç için skor girilmeli.");
+                                return;
+                              }
+                              if (m.scoreA > 32 || m.scoreB > 32) {
+                                alert("Skor 32'den fazla olamaz.");
+                                return;
+                              }
+                              if (!(m.scoreA === 32 || m.scoreB === 32)) {
+                                alert("Race-to-32: Bir takım mutlaka 32 puana ulaşmalı.");
+                                return;
+                              }
+                              if (m.scoreA === 32 && m.scoreB === 32) {
+                                alert("Her iki takım da 32 puana ulaşamaz.");
+                                return;
+                              }
+                            }
+                            
+                            // Compute per-player points
+                            const perPlayerUpdates: Record<string, number> = {};
+                            r.matches.forEach((m) => {
+                              const { teamA, teamB, scoreA = 0, scoreB = 0 } = m;
+                              const per = {
+                                [teamA[0]]: scoreA,
+                                [teamA[1]]: scoreA,
+                                [teamB[0]]: scoreB,
+                                [teamB[1]]: scoreB
+                              };
+                              m.perPlayerPoints = per;
+                              for (const [name, pts] of Object.entries(per)) {
+                                perPlayerUpdates[name] = (perPlayerUpdates[name] ?? 0) + pts;
+                              }
+                            });
+                            
+                            const newTotals = { ...totals };
+                            for (const [n, v] of Object.entries(perPlayerUpdates)) {
+                              newTotals[n] = (newTotals[n] ?? 0) + v;
+                            }
+                            
+                            const newRounds = [...rounds];
+                            newRounds[roundIndex] = { ...r, submitted: true };
+                            
+                            persistTournamentState({
+                              totals: newTotals,
+                              rounds: newRounds
+                            });
+                          }}
+                          className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 shadow-lg transition-all"
+                        >
+                          ✅ Turu Kaydet ve Tamamla
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
+              
+              {/* Oynanmamış maçlar (son tur harici) */}
+              {rounds.slice(0, -1).map((round) => {
+                const hasUnplayed = round.matches.some(m => m.scoreA === undefined || m.scoreB === undefined);
+                if (!hasUnplayed) return null;
+                return (
+                  <div key={round.number} className="bg-white rounded-2xl shadow p-4 mb-6">
+                    <h3 className="text-lg font-semibold mb-4 text-orange-700">⚠️ Oynanmamış Maçlar (Tur {round.number})</h3>
+                    <div className="space-y-3">
+                      {round.matches.map((m, mIdx) => (
+                        (m.scoreA === undefined || m.scoreB === undefined) && (
+                          <div key={mIdx} className="border-2 border-orange-200 rounded-xl p-4 bg-orange-50">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl">🔵</span>
+                                  <div>
+                                    <div className="font-semibold text-gray-800">{m.teamA[0]}</div>
+                                    <div className="font-semibold text-gray-800">{m.teamA[1]}</div>
+                                  </div>
+                                </div>
+                                <span className="text-lg font-bold text-gray-400">VS</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl">🔴</span>
+                                  <div>
+                                    <div className="font-semibold text-gray-800">{m.teamB[0]}</div>
+                                    <div className="font-semibold text-gray-800">{m.teamB[1]}</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="text-sm text-orange-600 font-medium bg-orange-100 px-3 py-1 rounded-full">
+                                Skor Girilmedi
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {/* Önceki tamamlanmış turlar: collapse/accordion */}
+              {[...rounds].slice(0, -1).reverse().map((round) => {
+                // Sadece tamamlanmış turlar
+                const allPlayed = round.matches.every(m => m.scoreA !== undefined && m.scoreB !== undefined);
+                if (!allPlayed) return null;
+                // Turun en son maç sonucu girilme tarihi
+                const matchDates = round.matches.map(m => m.savedAt).filter(Boolean).sort((a, b) => (b || '').localeCompare(a || ''));
+                const latestMatchDate = matchDates[0];
+                const isCollapsed = collapsedRounds[round.number] ?? true; // Varsayılan olarak kapalı
+                return (
+                  <div key={round.number} className="border rounded-xl shadow-sm mb-2">
+                    <button
+                      className="w-full flex justify-between items-center px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-t-xl text-left"
+                      onClick={() => toggleRoundCollapse(round.number)}
+                    >
+                      <span className="font-semibold">Tur {round.number}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500">{latestMatchDate && (<>📅 {new Date(latestMatchDate).toLocaleDateString('tr-TR', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</>)}</span>
+                        <span className="text-gray-400">{isCollapsed ? '▼' : '▲'}</span>
+                      </div>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="p-4 space-y-3">
+                        {round.matches.map((m, mIdx) => (
+                          <div key={mIdx} className="border rounded-lg p-3 bg-gray-50">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">🔵</span>
+                                  <div className="text-sm">
+                                    <div className="font-semibold text-gray-800">{m.teamA[0]}</div>
+                                    <div className="font-semibold text-gray-800">{m.teamA[1]}</div>
+                                  </div>
+                                </div>
+                                <span className="text-sm font-bold text-gray-400">VS</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">🔴</span>
+                                  <div className="text-sm">
+                                    <div className="font-semibold text-gray-800">{m.teamB[0]}</div>
+                                    <div className="font-semibold text-gray-800">{m.teamB[1]}</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <span className="text-2xl font-bold text-blue-700">{m.scoreA}</span>
+                                  <span className="text-xl font-bold text-gray-400 mx-2">-</span>
+                                  <span className="text-2xl font-bold text-red-700">{m.scoreB}</span>
+                                </div>
+                                {m.savedAt && (
+                                  <span className="text-xs text-gray-500">
+                                    {new Date(m.savedAt).toLocaleDateString('tr-TR', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </section>
           </>
         )}
@@ -1481,7 +1595,7 @@ function TournamentApp({
           
           // localStorage'a kaydet
           const savedSettings = localStorage.getItem(`tournament-settings-${tournamentId}`);
-          let currentData = {};
+          let currentData: Record<string, any> = {};
           if (savedSettings) {
             try {
               currentData = JSON.parse(savedSettings);
