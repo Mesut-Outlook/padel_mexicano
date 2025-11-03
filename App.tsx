@@ -5,6 +5,9 @@ import { LoginForm } from "./src/components/LoginForm";
 import { TournamentJoinForm } from "./src/components/TournamentJoinForm";
 import { TournamentSettingsModal, TournamentSettings } from "./src/components/TournamentSettingsModal";
 import { AdminTournamentDashboard } from "./src/components/AdminTournamentDashboard";
+import RulesPage from "./src/pages/RulesPage";
+import StandingsPage from "./src/pages/StandingsPage";
+import MatchesArchivePage from "./src/pages/MatchesArchivePage";
 
 // Mexicano Web App – Variable players (>=8, even). Round 1 random; subsequent rounds seeded:
 // After removing required BYEs to make players divisible by 4, pair as:
@@ -153,6 +156,7 @@ function TournamentApp({
   const [collapsedRounds, setCollapsedRounds] = useState<Record<number, boolean>>({});
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toKey = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
+  const [activePage, setActivePage] = useState<'main' | 'rules' | 'standings' | 'archive'>('main');
 
   // Turnuva ayarlarını yükle
   useEffect(() => {
@@ -655,7 +659,7 @@ function TournamentApp({
       teams.push([active[i], active[i + 1]]);
     }
     const matches: Match[] = [];
-    for (let i = 0; i < teams.length; i += 2) {
+    for (let i = 0; teams.length > 1 && i < teams.length; i += 2) {
       matches.push({ teamA: teams[i], teamB: teams[i + 1] });
     }
     const newRounds = [
@@ -958,6 +962,40 @@ function TournamentApp({
             </div>
           </div>
         </header>
+
+        {/* Üstte butonlar */}
+        <div className="flex flex-wrap gap-3 mb-6">
+          <button onClick={() => setActivePage('rules')} className="px-4 py-2 rounded-xl bg-blue-100 text-blue-700 font-semibold hover:bg-blue-200">Kurallar</button>
+          <button onClick={() => setActivePage('standings')} className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-semibold hover:bg-green-200">Sıralama</button>
+          <button onClick={() => setActivePage('archive')} className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200">Maç Arşivi</button>
+          {activePage !== 'main' && (
+            <button onClick={() => setActivePage('main')} className="px-4 py-2 rounded-xl bg-orange-100 text-orange-700 font-semibold hover:bg-orange-200">Ana Sayfa</button>
+          )}
+        </div>
+
+        {activePage === 'rules' && <RulesPage />}
+        {activePage === 'standings' && (
+          <StandingsPage ranking={ranking} totals={totals} matchBalance={matchBalance} byeCounts={byeCounts} calculateAverage={calculateAverage} />
+        )}
+        {activePage === 'archive' && (
+          <MatchesArchivePage rounds={rounds} />
+        )}
+        {activePage === 'main' && (
+          <>
+            {/* Sadece son tur ve oynanmamış maçlar ana sayfada gösterilecek */}
+            <section className="space-y-6">
+              {rounds.length > 0 && (() => {
+                const lastRound = rounds[rounds.length - 1];
+                return (
+                  <div className="bg-white rounded-2xl shadow p-4 mb-6">
+                    <h3 className="text-lg font-semibold mb-2">Son Tur (Tur {lastRound.number})</h3>
+                    {/* ...son turun maçları ve skor girişi kodu... */}
+                  </div>
+                );
+              })()}
+            </section>
+          </>
+        )}
 
         {/* Player editor */}
         <section className="bg-white rounded-2xl shadow p-4 mb-6">
@@ -1319,116 +1357,15 @@ function TournamentApp({
 
         {/* Rounds */}
         <section className="space-y-6">
-          {[...rounds].map((r, rIdxOrig, arr) => {
-            // Son turu en üstte göstermek için reverse et
-            const rIdx = arr.length - 1 - rIdxOrig;
-            const round = rounds[rIdx];
-            const isLastRound = rIdx === rounds.length - 1;
-            const isCollapsed = collapsedRounds[rIdx] && !isLastRound;
-            // O turdaki maçların en son kaydedilme tarihi
-            const matchDates = round.matches.map(m => m.savedAt).filter(Boolean).sort((a, b) => (b || '').localeCompare(a || ''));
-            const latestMatchDate = matchDates[0];
+          {rounds.length > 0 && (() => {
+            const lastRound = rounds[rounds.length - 1];
             return (
-              <div key={rIdx} className="bg-white rounded-2xl shadow p-4 mb-6">
-                <div
-                  className={`flex items-center justify-between ${!isLastRound ? 'cursor-pointer hover:bg-gray-50 -m-4 p-4 mb-4 rounded-t-2xl transition-colors' : ''}`}
-                  onClick={() => {
-                    if (!isLastRound) {
-                      setCollapsedRounds(prev => ({ ...prev, [rIdx]: !prev[rIdx] }));
-                    }
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    {!isLastRound && (
-                      <span className="text-gray-400">
-                        {isCollapsed ? '▶️' : '▼'}
-                      </span>
-                    )}
-                    <h3 className="text-lg font-semibold">Tur {round.number}</h3>
-                    {isLastRound && (
-                      <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Güncel</span>
-                    )}
-                    {latestMatchDate && (
-                      <span className="text-xs text-gray-500">
-                        📅 {new Date(latestMatchDate).toLocaleDateString('tr-TR', {
-                          day: 'numeric',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Başlangıç sıralaması: {round.rankingSnapshot.join(' • ')}
-                  </div>
-                </div>
-                {!isCollapsed && (
-                  <>
-                    {round.byes.length > 0 && (
-                      <div className="mt-2 text-sm text-amber-700">
-                        Bu tur bay: <span className="font-medium">{round.byes.join(' • ')}</span>
-                      </div>
-                    )}
-                    <div className="grid md:grid-cols-2 gap-4 mt-4">
-                      {(() => {
-                        const sorted = round.matches
-                          .map((m, idx) => ({ m, idx }))
-                          .sort((a, b) => {
-                            const ad = a.m.updatedAt || a.m.savedAt || '';
-                            const bd = b.m.updatedAt || b.m.savedAt || '';
-                            return bd.localeCompare(ad);
-                          });
-                        return sorted.map(({ m, idx: mIdx }) => (
-                          <div key={mIdx} className="border rounded-2xl p-4 shadow-sm bg-gradient-to-br from-gray-50 to-white">
-                            {/* ...maç kartı ve skor girişi kodu... */}
-                            {/* ...existing code... */}
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                    <div className="mt-3 flex items-center gap-3">
-                      {isAdmin ? (
-                        <>
-                          {!round.submitted && (
-                            <button
-                              onClick={() => submitRound(rIdx)}
-                              className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow"
-                            >
-                              Turu Kaydet / Puanları Dağıt
-                            </button>
-                          )}
-                          {!round.submitted && rIdx === rounds.length - 1 && (
-                            <span className="text-xs text-gray-500">
-                              ➡️ Bu turdaki tüm maçları kaydetmeden yeni eşleşmeler oluşturulamaz.
-                            </span>
-                          )}
-                          {round.submitted && rIdx === rounds.length - 1 && (
-                            <button
-                              onClick={addNextRound}
-                              className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
-                            >
-                              Sonraki Turu Oluştur
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        round.submitted ? (
-                          <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2">
-                            <span className="text-sm text-green-700">✅ Tur tamamlandı</span>
-                          </div>
-                        ) : (
-                          <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
-                            <span className="text-sm text-orange-700">⏳ Tur henüz kaydedilmedi</span>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </>
-                )}
+              <div className="bg-white rounded-2xl shadow p-4 mb-6">
+                <h3 className="text-lg font-semibold mb-2">Son Tur (Tur {lastRound.number})</h3>
+                {/* ...son turun maçları ve skor girişi kodu... */}
               </div>
             );
-          })}
+          })()}
         </section>
 
         {/* Standings */}
