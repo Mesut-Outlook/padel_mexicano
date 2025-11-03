@@ -150,6 +150,7 @@ function TournamentApp({
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tournamentSettings, setTournamentSettings] = useState<TournamentSettings>({});
+  const [collapsedRounds, setCollapsedRounds] = useState<Record<number, boolean>>({});
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toKey = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
 
@@ -1318,250 +1319,116 @@ function TournamentApp({
 
         {/* Rounds */}
         <section className="space-y-6">
-          {rounds.map((r, rIdx) => (
-            <div key={rIdx} className="bg-white rounded-2xl shadow p-4 mb-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Tur {r.number}</h3>
-                <div className="text-sm text-gray-500">
-                  Başlangıç sıralaması: {r.rankingSnapshot.join(" • ")}
-                </div>
-              </div>
-
-              {r.byes.length > 0 && (
-                <div className="mt-2 text-sm text-amber-700">
-                  Bu tur bay: <span className="font-medium">{r.byes.join(" • ")}</span>
-                </div>
-              )}
-
-              <div className="grid md:grid-cols-2 gap-4">
-                {(() => {
-                  const sorted = r.matches
-                    .map((m, idx) => ({ m, idx }))
-                    .sort((a, b) => {
-                      const ad = a.m.updatedAt || a.m.savedAt || '';
-                      const bd = b.m.updatedAt || b.m.savedAt || '';
-                      return bd.localeCompare(ad); // yeni üstte
-                    });
-                  return sorted.map(({ m, idx: mIdx }) => (
-                    <div key={mIdx} className="border rounded-2xl p-4 shadow-sm bg-gradient-to-br from-gray-50 to-white">
-                      {/* Takımlar */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="text-sm font-semibold text-gray-700">
-                          {m.teamA.join(" & ")} vs {m.teamB.join(" & ")}
-                        </div>
-                      </div>
-
-                      {/* Skor Girişi */}
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="bg-white rounded-xl p-3 border-2 border-blue-200 shadow-sm">
-                          <label className="block text-sm font-semibold text-blue-700 mb-2">
-                            🔵 Takım A Skoru
-                            <span className="block text-xs text-gray-500 font-normal mt-1">İlk 32'ye ulaşan kazanır</span>
-                          </label>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            min={0}
-                            max={32}
-                            value={m.scoreA ?? ""}
-                            aria-label="A takımı skoru"
-                            placeholder="0"
-                            disabled={!isAdmin || r.submitted}
-                            onChange={(e) => {
-                              if (!isAdmin) return;
-                              const inputValue = e.target.value;
-                              
-                              // Boş string ise temizle
-                              if (inputValue === "") {
-                                updateMatchScore(rIdx, mIdx, { scoreA: undefined });
-                                return;
-                              }
-                              
-                              // Sayıya çevir ve kontrol et
-                              const numValue = parseInt(inputValue, 10);
-                              
-                              // Geçersiz değerleri engelle
-                              if (isNaN(numValue) || numValue < 0) {
-                                return;
-                              }
-                              
-                              // 32'den büyükse 32 yap
-                              const value = Math.min(32, numValue);
-                              updateMatchScore(rIdx, mIdx, { scoreA: value });
-                            }}
-                            onKeyDown={(e) => {
-                              // Negatif değer girişini engelle
-                              if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
-                                e.preventDefault();
-                              }
-                            }}
-                            className={`w-full border-2 border-blue-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-blue-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none ${
-                              !isAdmin || r.submitted ? 'bg-gray-100 cursor-not-allowed' : ''
-                            }`}
-                          />
-                        </div>
-                        <div className="bg-white rounded-xl p-3 border-2 border-green-200 shadow-sm">
-                          <label className="block text-sm font-semibold text-green-700 mb-2">
-                            🟢 Takım B Skoru
-                            <span className="block text-xs text-gray-500 font-normal mt-1">İlk 32'ye ulaşan kazanır</span>
-                          </label>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            min={0}
-                            max={32}
-                            value={m.scoreB ?? ""}
-                            aria-label="B takımı skoru"
-                            placeholder="0"
-                            disabled={!isAdmin || r.submitted}
-                            onChange={(e) => {
-                              if (!isAdmin) return;
-                              const inputValue = e.target.value;
-                              
-                              // Boş string ise temizle
-                              if (inputValue === "") {
-                                updateMatchScore(rIdx, mIdx, { scoreB: undefined });
-                                return;
-                              }
-                              
-                              // Sayıya çevir ve kontrol et
-                              const numValue = parseInt(inputValue, 10);
-                              
-                              // Geçersiz değerleri engelle
-                              if (isNaN(numValue) || numValue < 0) {
-                                return;
-                              }
-                              
-                              // 32'den büyükse 32 yap
-                              const value = Math.min(32, numValue);
-                              updateMatchScore(rIdx, mIdx, { scoreB: value });
-                            }}
-                            onKeyDown={(e) => {
-                              // Negatif değer girişini engelle
-                              if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
-                                e.preventDefault();
-                              }
-                            }}
-                            className={`w-full border-2 border-green-300 rounded-xl px-3 py-3 text-center text-xl font-bold text-green-700 focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none ${
-                              !isAdmin || r.submitted ? 'bg-gray-100 cursor-not-allowed' : ''
-                            }`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Tarih ve Kaydet Alanı */}
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-xs text-gray-500">
-                          {m.savedAt || m.updatedAt ? (
-                            <span>
-                              🕒 Maç tarihi: {new Date(m.savedAt || m.updatedAt!).toLocaleString('tr-TR')}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">🕒 Henüz skor girilmedi</span>
-                          )}
-                        </div>
-                        {isAdmin && !r.submitted && (
-                          <div className="flex items-center gap-2">
-                            {m.scoreA != null && m.scoreB != null && (
-                              <button
-                                onClick={() => saveMatchScore(rIdx, mIdx)}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
-                              >
-                                💾 Skoru Kaydet
-                              </button>
-                            )}
-                            {m.scoreA != null && m.scoreB != null && (!m.savedAt || (m.updatedAt && m.savedAt < m.updatedAt)) && (
-                              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Kaydedilmedi</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Maç Sonucu Görünümü */}
-                      {m.scoreA !== undefined && m.scoreB !== undefined && (m.scoreA > 0 || m.scoreB > 0) && (
-                        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-4 border-l-4 border-yellow-400 shadow-sm">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold text-gray-800 mb-2">
-                              {m.scoreA} - {m.scoreB}
-                            </div>
-                            {m.scoreA === 32 && (
-                              <div className="inline-flex items-center bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">
-                                🏆 Takım A Kazandı!
-                              </div>
-                            )}
-                            {m.scoreB === 32 && (
-                              <div className="inline-flex items-center bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-bold">
-                                🏆 Takım B Kazandı!
-                              </div>
-                            )}
-                            {m.scoreA < 32 && m.scoreB < 32 && (m.scoreA > 0 || m.scoreB > 0) && (
-                              <div className="text-gray-600 font-medium">
-                                Maç devam ediyor...
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {m.perPlayerPoints && (
-                        <div className="mt-4 bg-gray-50 rounded-xl p-3 border border-gray-200">
-                          <div className="text-sm font-semibold text-gray-700 mb-2">📋 Dağıtılan Puanlar:</div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {Object.entries(m.perPlayerPoints).map(([n, v]) => (
-                              <div key={n} className="flex justify-between items-center bg-white rounded-lg px-2 py-1 text-sm">
-                                <span className="font-medium text-gray-700">{n}</span>
-                                <span className="font-bold text-blue-600">{v}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ));
-                })()}
-              </div>
-
-              <div className="mt-3 flex items-center gap-3">
-                {isAdmin ? (
-                  <>
-                    {!r.submitted && (
-                      <button
-                        onClick={() => submitRound(rIdx)}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow"
-                      >
-                        Turu Kaydet / Puanları Dağıt
-                      </button>
-                    )}
-                    {!r.submitted && rIdx === rounds.length - 1 && (
-                      <span className="text-xs text-gray-500">
-                        ➡️ Bu turdaki tüm maçları kaydetmeden yeni eşleşmeler oluşturulamaz.
+          {[...rounds].map((r, rIdxOrig, arr) => {
+            // Son turu en üstte göstermek için reverse et
+            const rIdx = arr.length - 1 - rIdxOrig;
+            const round = rounds[rIdx];
+            const isLastRound = rIdx === rounds.length - 1;
+            const isCollapsed = collapsedRounds[rIdx] && !isLastRound;
+            // O turdaki maçların en son kaydedilme tarihi
+            const matchDates = round.matches.map(m => m.savedAt).filter(Boolean).sort((a, b) => (b || '').localeCompare(a || ''));
+            const latestMatchDate = matchDates[0];
+            return (
+              <div key={rIdx} className="bg-white rounded-2xl shadow p-4 mb-6">
+                <div
+                  className={`flex items-center justify-between ${!isLastRound ? 'cursor-pointer hover:bg-gray-50 -m-4 p-4 mb-4 rounded-t-2xl transition-colors' : ''}`}
+                  onClick={() => {
+                    if (!isLastRound) {
+                      setCollapsedRounds(prev => ({ ...prev, [rIdx]: !prev[rIdx] }));
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    {!isLastRound && (
+                      <span className="text-gray-400">
+                        {isCollapsed ? '▶️' : '▼'}
                       </span>
                     )}
-                    {r.submitted && rIdx === rounds.length - 1 && (
-                      <button
-                        onClick={addNextRound}
-                        className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
-                      >
-                        Sonraki Turu Oluştur
-                      </button>
+                    <h3 className="text-lg font-semibold">Tur {round.number}</h3>
+                    {isLastRound && (
+                      <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Güncel</span>
                     )}
+                    {latestMatchDate && (
+                      <span className="text-xs text-gray-500">
+                        📅 {new Date(latestMatchDate).toLocaleDateString('tr-TR', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Başlangıç sıralaması: {round.rankingSnapshot.join(' • ')}
+                  </div>
+                </div>
+                {!isCollapsed && (
+                  <>
+                    {round.byes.length > 0 && (
+                      <div className="mt-2 text-sm text-amber-700">
+                        Bu tur bay: <span className="font-medium">{round.byes.join(' • ')}</span>
+                      </div>
+                    )}
+                    <div className="grid md:grid-cols-2 gap-4 mt-4">
+                      {(() => {
+                        const sorted = round.matches
+                          .map((m, idx) => ({ m, idx }))
+                          .sort((a, b) => {
+                            const ad = a.m.updatedAt || a.m.savedAt || '';
+                            const bd = b.m.updatedAt || b.m.savedAt || '';
+                            return bd.localeCompare(ad);
+                          });
+                        return sorted.map(({ m, idx: mIdx }) => (
+                          <div key={mIdx} className="border rounded-2xl p-4 shadow-sm bg-gradient-to-br from-gray-50 to-white">
+                            {/* ...maç kartı ve skor girişi kodu... */}
+                            {/* ...existing code... */}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                    <div className="mt-3 flex items-center gap-3">
+                      {isAdmin ? (
+                        <>
+                          {!round.submitted && (
+                            <button
+                              onClick={() => submitRound(rIdx)}
+                              className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow"
+                            >
+                              Turu Kaydet / Puanları Dağıt
+                            </button>
+                          )}
+                          {!round.submitted && rIdx === rounds.length - 1 && (
+                            <span className="text-xs text-gray-500">
+                              ➡️ Bu turdaki tüm maçları kaydetmeden yeni eşleşmeler oluşturulamaz.
+                            </span>
+                          )}
+                          {round.submitted && rIdx === rounds.length - 1 && (
+                            <button
+                              onClick={addNextRound}
+                              className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
+                            >
+                              Sonraki Turu Oluştur
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        round.submitted ? (
+                          <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2">
+                            <span className="text-sm text-green-700">✅ Tur tamamlandı</span>
+                          </div>
+                        ) : (
+                          <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
+                            <span className="text-sm text-orange-700">⏳ Tur henüz kaydedilmedi</span>
+                          </div>
+                        )
+                      )}
+                    </div>
                   </>
-                ) : (
-                  r.submitted ? (
-                    <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2">
-                      <span className="text-sm text-green-700">✅ Tur tamamlandı</span>
-                    </div>
-                  ) : (
-                    <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
-                      <span className="text-sm text-orange-700">⏳ Tur henüz kaydedilmedi</span>
-                    </div>
-                  )
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
 
         {/* Standings */}
