@@ -161,18 +161,28 @@ export function AdminTournamentDashboard({
           </div>
         </div>
 
-        {/* Yeni Turnuva Oluştur Butonu - Responsive */}
-        <button
-          onClick={onCreateNew}
-          className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 sm:py-4 px-4 sm:px-6 rounded-xl sm:rounded-2xl shadow-lg hover:shadow-xl transition-all mb-4 sm:mb-6 flex items-center justify-center gap-2 sm:gap-3 text-base sm:text-lg font-semibold hover:from-green-700 hover:to-emerald-700"
-        >
-          <span className="text-xl sm:text-2xl">✨</span>
-          <span className="hidden sm:inline">Yeni Turnuva Oluştur</span>
-          <span className="sm:hidden">Yeni Turnuva</span>
-        </button>
+        {/* Yeni Turnuva Kartı */}
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-gray-800">Yeni Bir Maceraya Başla</h2>
+              <p className="text-sm text-gray-600 mt-1">Yeni bir turnuva oluşturarak topluluğu bir araya getirin.</p>
+            </div>
+            <button
+              onClick={onCreateNew}
+              className="w-full sm:w-auto bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 text-base font-semibold hover:from-green-700 hover:to-emerald-700 flex-shrink-0"
+            >
+              <span className="text-xl">✨</span>
+              <span>Yeni Turnuva Oluştur</span>
+            </button>
+          </div>
+        </div>
 
-        {/* Tab Seçimi - Responsive */}
+        {/* Mevcut Turnuvalar */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl overflow-hidden">
+          <div className="p-3 sm:p-6 border-b border-gray-200">
+             <h2 className="text-lg sm:text-xl font-bold text-gray-800">Mevcut Turnuvalar</h2>
+          </div>
           <div className="flex border-b border-gray-200">
             <button
               onClick={() => setSelectedTab('active')}

@@ -303,7 +303,7 @@ function TournamentApp({
 
   const ranking = useMemo(() => currentRanking(), [players, totals]);
   const totalByeAssignments = useMemo(() => Object.values(byeCounts).reduce((sum, count) => sum + count, 0), [byeCounts]);
-  const byesNeededNow = needByesForCount(players.length);
+  const byesNeededNow = (4 - (players.length % 4)) % 4;
   const matchBalance = useMemo(() => {
     const counts: Record<string, number> = {};
     players.forEach((p) => {
@@ -377,6 +377,7 @@ function TournamentApp({
     perPlayerPoints?: Record<string, number>; // computed after submit
     updatedAt?: string; // son skor değişikliği zamanı
     savedAt?: string; // veritabanına en son kaydedilme zamanı
+    court?: number; // Saha numarası
   };
 
   type Round = {
@@ -385,6 +386,7 @@ function TournamentApp({
     rankingSnapshot: string[]; // ranking at the start of the round (best -> worst)
     byes: string[]; // players resting this round
     submitted?: boolean;
+    savedAt?: string; // Turun tamamlandığı zaman
   };
 
   function calculateAverage(playerName: string): number {
@@ -410,6 +412,142 @@ function TournamentApp({
 
     return takenPoints - givenPoints;
   }
+
+  const updateScore = (roundNumber: number, matchIndex: number, team: 'A' | 'B', score: number) => {
+    const newRounds = [...rounds];
+    const round = newRounds.find(r => r.number === roundNumber);
+    if (!round) return;
+
+    const match = round.matches[matchIndex];
+    if (!match) return;
+
+    // Skorları güncelle
+    const otherTeam = team === 'A' ? 'B' : 'A';
+    const scoreKey = `score${team}` as 'scoreA' | 'scoreB';
+    const otherScoreKey = `score${otherTeam}` as 'scoreA' | 'scoreB';
+
+    let newScore = isNaN(score) ? undefined : Math.max(0, score);
+    let otherScore = match[otherScoreKey];
+
+    // Race-to-32 kuralı
+    if (newScore !== undefined && newScore >= 32) {
+      newScore = 32;
+      if (otherScore !== undefined && otherScore >= 32) {
+        otherScore = 31; // Rakip 32 veya üstü olamaz
+      }
+    }
+
+    match[scoreKey] = newScore;
+    match[otherScoreKey] = otherScore;
+    match.updatedAt = new Date().toISOString();
+
+    // Kazananı belirle
+    if (match.scoreA !== undefined && match.scoreB !== undefined) {
+      if (match.scoreA === 32 && match.scoreB < 32) {
+        match.winner = 'A';
+      } else if (match.scoreB === 32 && match.scoreA < 32) {
+        match.winner = 'B';
+      } else {
+        match.winner = undefined; // Geçersiz skor durumu
+      }
+    } else {
+      match.winner = undefined;
+    }
+
+    setRounds(newRounds);
+    // Değişikliği anında veritabanına yansıtmak yerine, tur tamamlandığında toplu kaydetmek daha verimli.
+    // Ancak anlık güncellemeler isteniyorsa buraya persistTournamentState eklenebilir.
+    persistTournamentState({ rounds: newRounds });
+  };
+
+  const submitScores = async (roundNumber: number) => {
+    const round = rounds.find((r) => r.number === roundNumber);
+    if (!round) return;
+
+    // 1. Tüm maçların skorlarının geçerli olduğunu doğrula
+    for (const match of round.matches) {
+      const { scoreA, scoreB } = match;
+      const isValid =
+        (scoreA === 32 && scoreB! < 32) || (scoreB === 32 && scoreA! < 32);
+      if (!isValid) {
+        alert(`Geçersiz skor bulundu: ${match.teamA.join(" & ")} (${scoreA}) vs ${match.teamB.join(" & ")} (${scoreB}). Bir takım 32, diğeri 31 veya daha az olmalı.`);
+        return;
+      }
+    }
+
+    // 2. Puanları hesapla ve state'i güncelle
+    const nextTotals = { ...totals };
+
+    round.matches.forEach((match) => {
+      const { teamA, teamB, scoreA, scoreB } = match;
+      
+      // Puanları oyunculara dağıt
+      [...teamA, ...teamB].forEach(player => {
+        if (!nextTotals[player]) nextTotals[player] = 0;
+      });
+
+      // Puanları takımlara göre ekle
+      teamA.forEach(player => nextTotals[player] += scoreA!);
+      teamB.forEach(player => nextTotals[player] += scoreB!);
+
+      // Maç başına puanları kaydet (opsiyonel, analiz için)
+      match.perPlayerPoints = {};
+      teamA.forEach(p => match.perPlayerPoints![p] = scoreA!);
+      teamB.forEach(p => match.perPlayerPoints![p] = scoreB!);
+      match.savedAt = new Date().toISOString();
+    });
+
+    // 3. Turu "tamamlandı" olarak işaretle
+    round.submitted = true;
+    round.savedAt = new Date().toISOString();
+
+    // 4. Bay geçen oyuncuların sayısını güncelle
+    const nextByeCounts = { ...byeCounts };
+    round.byes.forEach((player) => {
+      if (!nextByeCounts[player]) nextByeCounts[player]++;
+    });
+
+    // 5. Yeni sıralamayı hesapla
+    const nextRanking = [...players].sort((a, b) => {
+      const totalDiff = (nextTotals[b] ?? 0) - (nextTotals[a] ?? 0);
+      if (totalDiff !== 0) return totalDiff;
+      // Averaj ve alfabetik sıralama için mevcut `calculateAverage` kullanılabilir,
+      // ancak `nextTotals` ile tutarlı olması için anlık hesaplama daha doğru olabilir.
+      return a.localeCompare(b, "tr");
+    });
+
+    // 6. Yeni turu oluştur
+    const n = players.length;
+    const byesNeeded = needByesForCount(n);
+    const byes = pickByes(nextRanking, byesNeeded);
+    const active = nextRanking.filter((p) => !byes.includes(p));
+
+    const matches: Match[] = [];
+    const playersToPair = [...active];
+    let courtCounter = 1;
+    while (playersToPair.length >= 4) {
+      const teamA: [string, string] = [playersToPair.shift()!, playersToPair.pop()!];
+      const teamB: [string, string] = [playersToPair.shift()!, playersToPair.pop()!];
+      matches.push({ teamA, teamB, court: courtCounter });
+      courtCounter = (courtCounter % courtCount) + 1;
+    }
+
+    const newRound: Round = {
+      number: round.number + 1,
+      matches,
+      rankingSnapshot: nextRanking,
+      byes,
+    };
+
+    const nextRounds = [...rounds, newRound];
+
+    // 7. Tüm state'i tek seferde kaydet
+    await persistTournamentState({
+      rounds: nextRounds,
+      totals: nextTotals,
+      byeCounts: nextByeCounts,
+    });
+  };
 
   function shuffle<T>(arr: T[]): T[] {
     const a = [...arr];
@@ -655,15 +793,11 @@ function TournamentApp({
     });
   }
 
-  function resetTournament() {
-    const initialTotals = Object.fromEntries(players.map((p) => [p, 0]));
-    const initialByes = Object.fromEntries(players.map((p) => [p, 0]));
-
-    persistTournamentState({
-      rounds: [],
-      totals: initialTotals,
-      byeCounts: initialByes
-    });
+  function clearLocalStorage() {
+    if (window.confirm('Tüm verileri silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+      localStorage.removeItem('padelTournamentState');
+      window.location.reload();
+    }
   }
 
   const toggleRoundCollapse = (roundNumber: number) => {
@@ -689,11 +823,9 @@ function TournamentApp({
                 </span>
                 <span className="hidden sm:inline text-gray-300">•</span>
                 <span>{players.length} oyuncu kayıtlı</span>
-                {error && (
-                  <span className="flex items-center gap-1 text-xs font-semibold bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
-                    📱 Offline Mod
-                  </span>
-                )}
+                <span className="flex items-center gap-1 text-xs font-semibold bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                  💾 Yerel Mod
+                </span>
               </div>
             </div>
             {/* Kullanıcı Bilgileri ve Çıkış */}
@@ -810,193 +942,121 @@ function TournamentApp({
         {activePage === 'main' && (
           <>
             <section className="space-y-6">
-              {/* Son tur - Maç detayları ve skor girişi */}
               {rounds.length > 0 && (() => {
                 const lastRound = rounds[rounds.length - 1];
-                const roundIndex = rounds.length - 1;
+                const unplayedMatches = lastRound.matches.filter(m => m.scoreA === undefined || m.scoreB === undefined);
+                const playedMatches = lastRound.matches.filter(m => m.scoreA !== undefined && m.scoreB !== undefined);
+
                 return (
                   <div className="bg-white rounded-2xl shadow p-6 mb-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-bold text-blue-800">🎾 Son Tur (Tur {lastRound.number})</h3>
-                      {lastRound.byes && lastRound.byes.length > 0 && (
-                        <div className="text-sm bg-amber-50 text-amber-700 px-3 py-1 rounded-full">
-                          ⏸️ Bay: {lastRound.byes.join(', ')}
-                        </div>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-800">
+                          Son Tur <span className="text-base font-medium text-gray-500">(Tur {lastRound.number})</span>
+                        </h3>
+                        {lastRound.submitted && (
+                          <div className="mt-1 text-xs font-medium text-white bg-green-500 px-2 py-1 rounded-full inline-block">
+                            ✓ Tur Tamamlandı ({new Date(lastRound.savedAt!).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })})
+                          </div>
+                        )}
+                      </div>
+                      {isAdmin && !lastRound.submitted && (
+                        <button
+                          onClick={() => submitScores(lastRound.number)}
+                          className="bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 shadow-md transition-all disabled:bg-gray-400 disabled:cursor-not-allowed"
+                          disabled={unplayedMatches.length > 0}
+                          title={unplayedMatches.length > 0 ? "Tüm maçların skoru girilmeden tur tamamlanamaz" : "Skorları onayla ve yeni turu oluştur"}
+                        >
+                          Turu Tamamla
+                        </button>
                       )}
                     </div>
-                    <div className="space-y-4">
-                      {lastRound.matches.map((m, mIdx) => (
-                        <div key={mIdx} className="border-2 border-blue-200 rounded-xl p-4 bg-gradient-to-r from-blue-50 to-indigo-50">
-                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                            {/* Takımlar */}
-                            <div className="flex-1 flex items-center justify-between md:justify-start gap-4">
-                              {/* Takım A */}
-                              <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-lg shadow-sm flex-1">
-                                <span className="text-2xl">🔵</span>
-                                <div>
-                                  <div className="text-xs text-gray-500 uppercase">Takım A</div>
-                                  <div className="font-semibold text-gray-800">
-                                    {m.teamA[0]}
-                                  </div>
-                                  <div className="font-semibold text-gray-800">
-                                    {m.teamA[1]}
-                                  </div>
-                                </div>
+
+                    {/* Maç Kartları */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Oynanmamış Maçlar */}
+                      {unplayedMatches.map((m) => {
+                        const originalMatchIndex = lastRound.matches.findIndex(match => match === m);
+                        return (
+                          <div key={originalMatchIndex} className="bg-gray-50 border border-gray-200 rounded-xl p-4 shadow-sm">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="font-semibold text-gray-700">Saha {m.court || originalMatchIndex % courtCount + 1}</h4>
+                              {m.updatedAt && (
+                                <span className="text-xs text-gray-400">
+                                  {new Date(m.updatedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs">{m.teamA.join(' & ')}</span>
+                                {isAdmin && !lastRound.submitted ? (
+                                  <input
+                                    type="number"
+                                    defaultValue={m.scoreA ?? ''}
+                                    onBlur={(e) => updateScore(lastRound.number, originalMatchIndex, 'A', parseInt(e.target.value))}
+                                    className="w-16 text-center border rounded-md px-2 py-1"
+                                  />
+                                ) : (
+                                  <span className="w-16 text-center font-bold">{m.scoreA ?? '-'}</span>
+                                )}
                               </div>
-                              
-                              <div className="text-2xl font-bold text-gray-400">VS</div>
-                              
-                              {/* Takım B */}
-                              <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-lg shadow-sm flex-1">
-                                <span className="text-2xl">🔴</span>
-                                <div>
-                                  <div className="text-xs text-gray-500 uppercase">Takım B</div>
-                                  <div className="font-semibold text-gray-800">
-                                    {m.teamB[0]}
-                                  </div>
-                                  <div className="font-semibold text-gray-800">
-                                    {m.teamB[1]}
-                                  </div>
-                                </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs">{m.teamB.join(' & ')}</span>
+                                {isAdmin && !lastRound.submitted ? (
+                                  <input
+                                    type="number"
+                                    defaultValue={m.scoreB ?? ''}
+                                    onBlur={(e) => updateScore(lastRound.number, originalMatchIndex, 'B', parseInt(e.target.value))}
+                                    className="w-16 text-center border rounded-md px-2 py-1"
+                                  />
+                                ) : (
+                                  <span className="w-16 text-center font-bold">{m.scoreB ?? '-'}</span>
+                                )}
                               </div>
                             </div>
-                            
-                            {/* Skor Girişi */}
-                            {isAdmin && !lastRound.submitted && (
-                              <div className="flex items-center gap-3 bg-white px-4 py-3 rounded-lg shadow-sm">
-                                <div className="flex flex-col items-center">
-                                  <label className="text-xs text-gray-500 mb-1">Takım A</label>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="32"
-                                    value={m.scoreA ?? ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value === '' ? undefined : Math.min(32, Math.max(0, parseInt(e.target.value) || 0));
-                                      const newRounds = [...rounds];
-                                      newRounds[roundIndex].matches[mIdx].scoreA = val;
-                                      if (val === 32 && (m.scoreB ?? 0) < 32) {
-                                        newRounds[roundIndex].matches[mIdx].winner = 'A';
-                                      } else if ((m.scoreB ?? 0) === 32 && val !== undefined && val < 32) {
-                                        newRounds[roundIndex].matches[mIdx].winner = 'B';
-                                      } else {
-                                        newRounds[roundIndex].matches[mIdx].winner = undefined;
-                                      }
-                                      setRounds(newRounds);
-                                    }}
-                                    className="w-16 text-center border-2 border-blue-300 rounded-lg px-2 py-2 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  />
-                                </div>
-                                <span className="text-2xl font-bold text-gray-400">-</span>
-                                <div className="flex flex-col items-center">
-                                  <label className="text-xs text-gray-500 mb-1">Takım B</label>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="32"
-                                    value={m.scoreB ?? ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value === '' ? undefined : Math.min(32, Math.max(0, parseInt(e.target.value) || 0));
-                                      const newRounds = [...rounds];
-                                      newRounds[roundIndex].matches[mIdx].scoreB = val;
-                                      if (val === 32 && (m.scoreA ?? 0) < 32) {
-                                        newRounds[roundIndex].matches[mIdx].winner = 'B';
-                                      } else if ((m.scoreA ?? 0) === 32 && val !== undefined && val < 32) {
-                                        newRounds[roundIndex].matches[mIdx].winner = 'A';
-                                      } else {
-                                        newRounds[roundIndex].matches[mIdx].winner = undefined;
-                                      }
-                                      setRounds(newRounds);
-                                    }}
-                                    className="w-16 text-center border-2 border-red-300 rounded-lg px-2 py-2 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-red-500"
-                                  />
-                                </div>
-                                {m.scoreA !== undefined && m.scoreB !== undefined && m.winner && (
-                                  <div className="ml-2">
-                                    <span className="text-2xl">{m.winner === 'A' ? '🏆' : '🏆'}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            
-                            {/* Sadece skor gösterimi (admin değilse veya submit edilmişse) */}
-                            {(!isAdmin || lastRound.submitted) && m.scoreA !== undefined && m.scoreB !== undefined && (
-                              <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-lg shadow-sm">
-                                <div className="text-center">
-                                  <div className="text-3xl font-bold text-blue-600">{m.scoreA}</div>
-                                </div>
-                                <span className="text-2xl font-bold text-gray-400">-</span>
-                                <div className="text-center">
-                                  <div className="text-3xl font-bold text-red-600">{m.scoreB}</div>
-                                </div>
-                                {m.winner && (
-                                  <span className="text-3xl ml-2">🏆</span>
-                                )}
-                              </div>
-                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
+                      
+                      {/* Oynanmış Maçlar */}
+                      {playedMatches.map((m) => {
+                        const originalMatchIndex = lastRound.matches.findIndex(match => match === m);
+                        const isWinnerA = m.scoreA! > m.scoreB!;
+                        return (
+                          <div key={originalMatchIndex} className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-4">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="font-semibold text-emerald-800">Saha {m.court || originalMatchIndex % courtCount + 1}</h4>
+                              {m.savedAt && (
+                                <span className="text-xs text-gray-500">
+                                  {new Date(m.savedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between items-center">
+                                <span className={`text-xs ${isWinnerA ? 'font-bold text-emerald-900' : 'text-gray-600'}`}>{m.teamA.join(' & ')}</span>
+                                <span className={`font-bold ${isWinnerA ? 'text-emerald-900' : 'text-gray-600'}`}>{m.scoreA}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className={`text-xs ${!isWinnerA ? 'font-bold text-emerald-900' : 'text-gray-600'}`}>{m.teamB.join(' & ')}</span>
+                                <span className={`font-bold ${!isWinnerA ? 'text-emerald-900' : 'text-gray-600'}`}>{m.scoreB}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {/* Submit butonu - sadece admin için */}
-                    {isAdmin && !lastRound.submitted && (
-                      <div className="mt-6 flex justify-end">
-                        <button
-                          onClick={() => {
-                            const r = lastRound;
-                            // Validation
-                            for (const m of r.matches) {
-                              if (m.scoreA == null || m.scoreB == null) {
-                                alert("Her maç için skor girilmeli.");
-                                return;
-                              }
-                              if (m.scoreA > 32 || m.scoreB > 32) {
-                                alert("Skor 32'den fazla olamaz.");
-                                return;
-                              }
-                              if (!(m.scoreA === 32 || m.scoreB === 32)) {
-                                alert("Race-to-32: Bir takım mutlaka 32 puana ulaşmalı.");
-                                return;
-                              }
-                              if (m.scoreA === 32 && m.scoreB === 32) {
-                                alert("Her iki takım da 32 puana ulaşamaz.");
-                                return;
-                              }
-                            }
-                            
-                            // Compute per-player points
-                            const perPlayerUpdates: Record<string, number> = {};
-                            r.matches.forEach((m) => {
-                              const { teamA, teamB, scoreA = 0, scoreB = 0 } = m;
-                              const per = {
-                                [teamA[0]]: scoreA,
-                                [teamA[1]]: scoreA,
-                                [teamB[0]]: scoreB,
-                                [teamB[1]]: scoreB
-                              };
-                              m.perPlayerPoints = per;
-                              for (const [name, pts] of Object.entries(per)) {
-                                perPlayerUpdates[name] = (perPlayerUpdates[name] ?? 0) + pts;
-                              }
-                            });
-                            
-                            const newTotals = { ...totals };
-                            for (const [n, v] of Object.entries(perPlayerUpdates)) {
-                              newTotals[n] = (newTotals[n] ?? 0) + v;
-                            }
-                            
-                            const newRounds = [...rounds];
-                            newRounds[roundIndex] = { ...r, submitted: true };
-                            
-                            persistTournamentState({
-                              totals: newTotals,
-                              rounds: newRounds
-                            });
-                          }}
-                          className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 shadow-lg transition-all"
-                        >
-                          ✅ Turu Kaydet ve Tamamla
-                        </button>
+                    
+                    {/* Bay Geçenler */}
+                    {lastRound.byes.length > 0 && (
+                      <div className="mt-5 border-t pt-4">
+                        <h4 className="font-semibold text-gray-600 mb-2">Bay Geçenler</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {lastRound.byes.map(p => (
+                            <span key={p} className="bg-gray-100 text-gray-700 text-sm px-3 py-1 rounded-full">{p}</span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1005,108 +1065,113 @@ function TournamentApp({
               
               {/* Oynanmamış maçlar (son tur harici) */}
               {rounds.slice(0, -1).map((round) => {
-                const hasUnplayed = round.matches.some(m => m.scoreA === undefined || m.scoreB === undefined);
-                if (!hasUnplayed) return null;
+                const unplayedMatches = round.matches.filter(m => m.scoreA === undefined || m.scoreB === undefined);
+                if (unplayedMatches.length === 0) return null;
+                
                 return (
-                  <div key={round.number} className="bg-white rounded-2xl shadow p-4 mb-6">
-                    <h3 className="text-lg font-semibold mb-4 text-orange-700">⚠️ Oynanmamış Maçlar (Tur {round.number})</h3>
-                    <div className="space-y-3">
-                      {round.matches.map((m, mIdx) => (
-                        (m.scoreA === undefined || m.scoreB === undefined) && (
-                          <div key={mIdx} className="border-2 border-orange-200 rounded-xl p-4 bg-orange-50">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xl">🔵</span>
-                                  <div>
-                                    <div className="font-semibold text-gray-800">{m.teamA[0]}</div>
-                                    <div className="font-semibold text-gray-800">{m.teamA[1]}</div>
-                                  </div>
-                                </div>
-                                <span className="text-lg font-bold text-gray-400">VS</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xl">🔴</span>
-                                  <div>
-                                    <div className="font-semibold text-gray-800">{m.teamB[0]}</div>
-                                    <div className="font-semibold text-gray-800">{m.teamB[1]}</div>
-                                  </div>
-                                </div>
+                  <div key={round.number} className="bg-white rounded-2xl shadow p-6 mb-6">
+                    <h3 className="text-lg font-semibold text-amber-800 mb-3">
+                      Tur {round.number} - Oynanmamış Maçlar
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {unplayedMatches.map((m) => {
+                        const originalMatchIndex = round.matches.findIndex(match => match === m);
+                        return (
+                          <div key={originalMatchIndex} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                            <h4 className="font-semibold text-gray-700 mb-2">Saha {m.court || originalMatchIndex % courtCount + 1}</h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs">{m.teamA.join(' & ')}</span>
+                                <span className="font-mono text-gray-500">[skor girilmedi]</span>
                               </div>
-                              <span className="text-sm text-orange-600 font-medium bg-orange-100 px-3 py-1 rounded-full">
-                                Skor Girilmedi
-                              </span>
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs">{m.teamB.join(' & ')}</span>
+                                <span className="font-mono text-gray-500">[skor girilmedi]</span>
+                              </div>
                             </div>
                           </div>
-                        )
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
               
               {/* Önceki tamamlanmış turlar: collapse/accordion */}
-              {[...rounds].slice(0, -1).reverse().map((round) => {
-                // Sadece tamamlanmış turlar
-                const allPlayed = round.matches.every(m => m.scoreA !== undefined && m.scoreB !== undefined);
-                if (!allPlayed) return null;
-                // Turun en son maç sonucu girilme tarihi
-                const matchDates = round.matches.map(m => m.savedAt).filter(Boolean).sort((a, b) => (b || '').localeCompare(a || ''));
-                const latestMatchDate = matchDates[0];
-                const isCollapsed = collapsedRounds[round.number] ?? true; // Varsayılan olarak kapalı
-                return (
-                  <div key={round.number} className="border rounded-xl shadow-sm mb-2">
-                    <button
-                      className="w-full flex justify-between items-center px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-t-xl text-left"
-                      onClick={() => toggleRoundCollapse(round.number)}
-                    >
-                      <span className="font-semibold">Tur {round.number}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500">{latestMatchDate && (<>📅 {new Date(latestMatchDate).toLocaleDateString('tr-TR', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</>)}</span>
-                        <span className="text-gray-400">{isCollapsed ? '▼' : '▲'}</span>
-                      </div>
-                    </button>
-                    {!isCollapsed && (
-                      <div className="p-4 space-y-3">
-                        {round.matches.map((m, mIdx) => (
-                          <div key={mIdx} className="border rounded-lg p-3 bg-gray-50">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">🔵</span>
-                                  <div className="text-sm">
-                                    <div className="font-semibold text-gray-800">{m.teamA[0]}</div>
-                                    <div className="font-semibold text-gray-800">{m.teamA[1]}</div>
+              <div className="space-y-2">
+                {[...rounds].slice(0, -1).reverse().map((round) => {
+                  const allPlayed = round.matches.every(m => m.scoreA !== undefined && m.scoreB !== undefined);
+                  if (!allPlayed) return null;
+                  
+                  const matchDates = round.matches.map(m => m.savedAt).filter(Boolean).sort((a, b) => (b || '').localeCompare(a || ''));
+                  const latestMatchDate = matchDates[0];
+                  const isCollapsed = collapsedRounds[round.number] ?? true;
+
+                  return (
+                    <div key={round.number} className="bg-white rounded-2xl shadow-sm border">
+                      <button
+                        onClick={() => toggleRoundCollapse(round.number)}
+                        className="w-full text-left p-4 flex justify-between items-center"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`transform transition-transform duration-200 ${!isCollapsed ? 'rotate-90' : ''}`}>
+                            ▶
+                          </span>
+                          <span className="font-semibold text-gray-800">
+                            Tur {round.number}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            ({round.matches.length} maç)
+                          </span>
+                          {round.submitted && latestMatchDate && (
+                            <span className="hidden sm:inline-block text-xs font-medium text-white bg-green-500 px-2 py-1 rounded-full">
+                              ✓ {new Date(latestMatchDate).toLocaleDateString('tr-TR')}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm font-medium text-blue-600">
+                          {isCollapsed ? 'Detayları Gör' : 'Gizle'}
+                        </span>
+                      </button>
+                      
+                      {!isCollapsed && (
+                        <div className="p-4 border-t">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {round.matches.map((m, idx) => {
+                              const isWinnerA = m.scoreA! > m.scoreB!;
+                              return (
+                                <div key={idx} className="bg-gray-50 rounded-lg p-3 border">
+                                  <h5 className="font-semibold text-sm text-gray-600 mb-2">Saha {m.court || idx % courtCount + 1}</h5>
+                                  <div className="space-y-1 text-xs">
+                                    <div className="flex justify-between">
+                                      <span className={isWinnerA ? 'font-bold' : ''}>{m.teamA.join(' & ')}</span>
+                                      <span className={isWinnerA ? 'font-bold' : ''}>{m.scoreA}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className={!isWinnerA ? 'font-bold' : ''}>{m.teamB.join(' & ')}</span>
+                                      <span className={!isWinnerA ? 'font-bold' : ''}>{m.scoreB}</span>
+                                    </div>
                                   </div>
                                 </div>
-                                <span className="text-sm font-bold text-gray-400">VS</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">🔴</span>
-                                  <div className="text-sm">
-                                    <div className="font-semibold text-gray-800">{m.teamB[0]}</div>
-                                    <div className="font-semibold text-gray-800">{m.teamB[1]}</div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <div className="text-right">
-                                  <span className="text-2xl font-bold text-blue-700">{m.scoreA}</span>
-                                  <span className="text-xl font-bold text-gray-400 mx-2">-</span>
-                                  <span className="text-2xl font-bold text-red-700">{m.scoreB}</span>
-                                </div>
-                                {m.savedAt && (
-                                  <span className="text-xs text-gray-500">
-                                    {new Date(m.savedAt).toLocaleDateString('tr-TR', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}
-                                  </span>
-                                )}
+                              );
+                            })}
+                          </div>
+                          {round.byes.length > 0 && (
+                            <div className="mt-4 pt-3 border-t">
+                              <h5 className="font-semibold text-sm text-gray-600 mb-2">Bay Geçenler</h5>
+                              <div className="flex flex-wrap gap-2">
+                                {round.byes.map(p => (
+                                  <span key={p} className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded-md">{p}</span>
+                                ))}
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           </>
         )}
@@ -1245,11 +1310,9 @@ function TournamentApp({
                   onChange={(e) => setCourtCount(Number(e.target.value))}
                   className="ml-2 border rounded-lg px-2 py-1 text-sm"
                 >
-                  <option value={1}>1 Saha</option>
-                  <option value={2}>2 Saha</option>
-                  <option value={3}>3 Saha</option>
-                  <option value={4}>4 Saha</option>
-                  <option value={5}>5 Saha</option>
+                  {[...Array(10).keys()].map(i => (
+                    <option key={i + 1} value={i + 1}>{i + 1}</option>
+                  ))}
                 </select>
               </label>
               <div className="text-sm text-gray-600">
@@ -1284,21 +1347,21 @@ function TournamentApp({
                   key={name}
                   className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3 py-2 shadow-sm border border-gray-200"
                 >
-                  <span className="text-sm font-medium text-gray-700">{name}</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleAddPlayerFromPool(name)}
-                      className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-200"
-                    >
-                      Oyuna Al
-                    </button>
-                    <button
-                      onClick={() => handleRemovePlayerFromPool(name)}
-                      className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-lg hover:bg-red-200"
-                    >
-                      Sil
-                    </button>
-                  </div>
+                  <span className="text-sm font-medium text-gray-800">{name}</span>
+                  <button
+                    onClick={() => handleAddPlayerFromPool(name)}
+                    className="text-xs bg-green-200 text-green-800 rounded-full w-6 h-6 flex items-center justify-center hover:bg-green-300"
+                    title={`${name} turnuvaya ekle`}
+                  >
+                    +
+                  </button>
+                  <button
+                    onClick={() => handleRemovePlayerFromPool(name)}
+                    className="text-xs bg-red-200 text-red-800 rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-300"
+                    title={`${name} havuzdan sil`}
+                  >
+                    -
+                  </button>
                 </div>
               ))}
             </div>
@@ -1446,135 +1509,45 @@ function TournamentApp({
           })()}
 
           {isAdmin ? (
-            <div className="flex items-center gap-3 mt-4">
+            <div className="mt-6 text-center">
               <button
                 onClick={startTournament}
-                className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
+                className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg transition-all disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
               >
                 Turnuvayı Başlat (Tur 1 Rastgele)
               </button>
-              <button
-                onClick={resetTournament}
-                className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300"
-              >
-                Sıfırla
-              </button>
+              {rounds.length > 0 && (
+                <p className="text-sm text-gray-500 mt-2">Turnuva zaten başladı.</p>
+              )}
             </div>
           ) : (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mt-4">
-              <p className="text-sm text-orange-700">
-                🔒 Sadece <span className="font-bold">Admin</span> kullanıcılar turnuvayı başlatabilir ve sıfırlayabilir.
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-600 bg-gray-100 p-3 rounded-lg">
+                Tur oluşturma ve skor girişi sadece yönetici tarafından yapılabilir.
               </p>
             </div>
           )}
         </section>
 
-        {/* Rounds */}
-        <section className="space-y-6">
-          {rounds.length > 0 && (() => {
-            const lastRound = rounds[rounds.length - 1];
-            return (
-              <div className="bg-white rounded-2xl shadow p-4 mb-6">
-                <h3 className="text-lg font-semibold mb-2">Son Tur (Tur {lastRound.number})</h3>
-                {/* ...son turun maçları ve skor girişi kodu... */}
-              </div>
-            );
-          })()}
+        <section className="bg-white rounded-2xl shadow p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-800">Yönetici Paneli</h2>
+            <button onClick={clearLocalStorage} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 text-sm">
+              Turnuvayı Sıfırla
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Oyuncu Ekleme */}
+            <div>
+              {/* ... */}
+            </div>
+          </div>
         </section>
 
         {/* Standings */}
         <section className="bg-white rounded-2xl shadow p-4 mt-6">
           <h2 className="text-xl font-semibold mb-3">Güncel Sıralama</h2>
-          {!matchBalance.isBalanced && (
-            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-              <div className="font-semibold text-amber-800 mb-1">Maç dağılımı henüz dengede değil</div>
-              <div>
-                En yüksek maç sayısı {matchBalance.max} ({matchBalance.playersNeedingRest.join(" • ")}) ve en düşük {matchBalance.min}
-                {matchBalance.playersNeedingPlay.length ? ` (${matchBalance.playersNeedingPlay.join(" • ")})` : ""}.
-                Farkı kapatmak için sonraki turda daha az maç yapan oyunculara saha vermeyi unutmayın.
-              </div>
-            </div>
-          )}
-          {matchBalance.isBalanced && rounds.some((round) => round.submitted) && (
-            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              <div className="font-semibold text-emerald-800">Tebrikler! Her oyuncu eşit sayıda maç oynadı.</div>
-            </div>
-          )}
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left border-b">
-                  <th className="py-2 pr-4">#</th>
-                  <th className="py-2 pr-4">Oyuncu</th>
-                  <th className="py-2 pr-4">Toplam Puan</th>
-                  <th className="py-2 pr-4">Averaj</th>
-                  <th className="py-2 pr-4">Oynanan Maç</th>
-                  <th className="py-2 pr-4">Bay</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.map((p, i) => {
-                  const avg = calculateAverage(p);
-                  const matchesPlayed = matchBalance.counts[p] ?? 0;
-                  return (
-                    <tr key={p} className="border-b last:border-0">
-                      <td className="py-2 pr-4 font-medium">{i + 1}</td>
-                      <td className="py-2 pr-4">{p}</td>
-                      <td className="py-2 pr-4 font-semibold">{totals[p] ?? 0}</td>
-                      <td className={`py-2 pr-4 font-semibold ${
-                        avg > 0 ? 'text-green-600' : avg < 0 ? 'text-red-600' : 'text-gray-600'
-                      }`}>
-                        {avg > 0 ? '+' : ''}{avg}
-                      </td>
-                      <td className="py-2 pr-4">{matchesPlayed}</td>
-                      <td className="py-2 pr-4">{byeCounts[p] ?? 0}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Kurallar Bölümü */}
-        <section className="bg-white rounded-2xl shadow p-6 mt-6">
-          <h2 className="text-xl font-semibold mb-4 text-blue-800">📋 Oyun Kuralları</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-2">🎯 Maç Formatı</h3>
-              <ul className="space-y-1 text-sm text-gray-600">
-                <li>• Maçlar <strong>32 puana kadar</strong> oynanır</li>
-                <li>• İlk 32'ye ulaşan takım kazanır</li>
-                <li>• Örnek skorlar: 32-15, 32-20, 32-8</li>
-                <li>• Her oyuncu takımının aldığı puanı alır</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-2">🏆 Tur Sistemi</h3>
-              <ul className="space-y-1 text-sm text-gray-600">
-                <li>• <strong>1. Tur:</strong> Rastgele eşleştirme</li>
-                <li>• <strong>Sonraki turlar:</strong> Sıralamaya göre</li>
-                <li>• En iyi + en kötü vs 2. + son 2.</li>
-                <li>• Minimum 8 oyuncu (çift sayı)</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-2">📊 Sıralama</h3>
-              <ul className="space-y-1 text-sm text-gray-600">
-                <li>• <strong>1. Kriter:</strong> Toplam puan</li>
-                <li>• <strong>2. Kriter:</strong> Averaj (alınan - verilen)</li>
-                <li>• <strong>3. Kriter:</strong> Alfabetik sıra</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-2">⏸️ Bay Sistemi</h3>
-              <ul className="space-y-1 text-sm text-gray-600">
-                <li>• Oyuncu sayısı 4'ün katı değilse bay verilir</li>
-                <li>• Bay sırası adil rotasyonla</li>
-                <li>• En az bay alan önceliklidir</li>
-              </ul>
-            </div>
-          </div>
+          <StandingsPage ranking={ranking} totals={totals} matchBalance={matchBalance} byeCounts={byeCounts} calculateAverage={calculateAverage} />
         </section>
       </div>
 
@@ -1583,7 +1556,7 @@ function TournamentApp({
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
         currentSettings={tournamentSettings}
-        onSave={(settings) => {
+        onSave={(settings: TournamentSettings) => {
           setTournamentSettings(settings);
           
           // Saha sayısını güncelle
@@ -1594,14 +1567,15 @@ function TournamentApp({
           }
           
           // localStorage'a kaydet
-          const savedSettings = localStorage.getItem(`tournament-settings-${tournamentId}`);
+          const storageKey = `tournament-settings-${tournamentId}`;
           let currentData: Record<string, any> = {};
-          if (savedSettings) {
-            try {
-              currentData = JSON.parse(savedSettings);
-            } catch (e) {
-              console.error('Parse error:', e);
+          try {
+            const savedData = localStorage.getItem(storageKey);
+            if (savedData) {
+              currentData = JSON.parse(savedData);
             }
+          } catch (e) {
+            console.error('Parse error:', e);
           }
           
           const updatedSettings = {
@@ -1610,7 +1584,7 @@ function TournamentApp({
             updatedAt: new Date().toISOString()
           };
           
-          localStorage.setItem(`tournament-settings-${tournamentId}`, JSON.stringify(updatedSettings));
+          localStorage.setItem(storageKey, JSON.stringify(updatedSettings));
         }}
       />
     </div>
