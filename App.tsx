@@ -995,9 +995,10 @@ function TournamentApp({
                                     type="number"
                                     defaultValue={m.scoreA ?? ''}
                                     onBlur={(e) => updateScore(lastRound.number, originalMatchIndex, 'A', parseInt(e.target.value))}
-                                    className="w-16 text-center border rounded-md px-2 py-1"
+                                    className="w-16 text-center border rounded-md px-2 py-1 bg-white"
                                     disabled={lastRound.submitted}
                                     title={lastRound.submitted ? "Tur tamamlanmış - düzenleme kapalı" : "Skor girin"}
+                                    placeholder="0-32"
                                   />
                                 ) : (
                                   <span className="w-16 text-center font-bold">{m.scoreA ?? '-'}</span>
@@ -1010,9 +1011,10 @@ function TournamentApp({
                                     type="number"
                                     defaultValue={m.scoreB ?? ''}
                                     onBlur={(e) => updateScore(lastRound.number, originalMatchIndex, 'B', parseInt(e.target.value))}
-                                    className="w-16 text-center border rounded-md px-2 py-1"
+                                    className="w-16 text-center border rounded-md px-2 py-1 bg-white"
                                     disabled={lastRound.submitted}
                                     title={lastRound.submitted ? "Tur tamamlanmış - düzenleme kapalı" : "Skor girin"}
+                                    placeholder="0-32"
                                   />
                                 ) : (
                                   <span className="w-16 text-center font-bold">{m.scoreB ?? '-'}</span>
