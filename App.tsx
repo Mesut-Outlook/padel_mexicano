@@ -990,12 +990,14 @@ function TournamentApp({
                             <div className="space-y-2 text-sm">
                               <div className="flex justify-between items-center">
                                 <span className="text-xs">{m.teamA.join(' & ')}</span>
-                                {isAdmin && !lastRound.submitted ? (
+                                {isAdmin ? (
                                   <input
                                     type="number"
                                     defaultValue={m.scoreA ?? ''}
                                     onBlur={(e) => updateScore(lastRound.number, originalMatchIndex, 'A', parseInt(e.target.value))}
                                     className="w-16 text-center border rounded-md px-2 py-1"
+                                    disabled={lastRound.submitted}
+                                    title={lastRound.submitted ? "Tur tamamlanmış - düzenleme kapalı" : "Skor girin"}
                                   />
                                 ) : (
                                   <span className="w-16 text-center font-bold">{m.scoreA ?? '-'}</span>
@@ -1003,12 +1005,14 @@ function TournamentApp({
                               </div>
                               <div className="flex justify-between items-center">
                                 <span className="text-xs">{m.teamB.join(' & ')}</span>
-                                {isAdmin && !lastRound.submitted ? (
+                                {isAdmin ? (
                                   <input
                                     type="number"
                                     defaultValue={m.scoreB ?? ''}
                                     onBlur={(e) => updateScore(lastRound.number, originalMatchIndex, 'B', parseInt(e.target.value))}
                                     className="w-16 text-center border rounded-md px-2 py-1"
+                                    disabled={lastRound.submitted}
+                                    title={lastRound.submitted ? "Tur tamamlanmış - düzenleme kapalı" : "Skor girin"}
                                   />
                                 ) : (
                                   <span className="w-16 text-center font-bold">{m.scoreB ?? '-'}</span>
