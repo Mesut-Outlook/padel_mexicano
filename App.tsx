@@ -383,6 +383,47 @@ function TournamentApp({
     };
   }, [players, rounds]);
 
+  const toDateKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDateTime = (iso?: string) => {
+    if (!iso) return "–";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "–";
+    return date.toLocaleString("tr-TR", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const formatDateInputValue = (iso?: string) => {
+    if (!iso) return "";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    const hours = `${date.getHours()}`.padStart(2, "0");
+    const minutes = `${date.getMinutes()}`.padStart(2, "0");
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
+  const parseDateInput = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+  };
+
   const winLossStats = useMemo(() => {
     const stats: Record<string, { wins: number; losses: number }> = {};
 
@@ -432,6 +473,9 @@ function TournamentApp({
     let scheduled = 0;
     let pending = 0;
     let submittedRounds = 0;
+    let playedToday = 0;
+
+    const todayKey = toDateKey(new Date());
 
     rounds.forEach((round) => {
       scheduled += round.matches.length;
@@ -444,6 +488,12 @@ function TournamentApp({
         const hasScoreB = match.scoreB != null;
         if (hasScoreA && hasScoreB) {
           played += 1;
+          if (match.savedAt) {
+            const matchDate = new Date(match.savedAt);
+            if (!Number.isNaN(matchDate.getTime()) && toDateKey(matchDate) === todayKey) {
+              playedToday += 1;
+            }
+          }
         } else {
           pending += 1;
         }
@@ -456,6 +506,7 @@ function TournamentApp({
       pending,
       submittedRounds,
       totalRounds: rounds.length,
+      playedToday,
     };
   }, [rounds]);
 
@@ -464,14 +515,30 @@ function TournamentApp({
     [players.length, courtCount, tournamentSettings.days, tournamentSettings.estimatedRounds]
   );
 
+  const MATCH_DURATION_MINUTES = 30;
+  const DAILY_WINDOW_MINUTES = 90;
+  const plannedDays = typeof tournamentSettings.days === "number" && tournamentSettings.days > 0
+    ? tournamentSettings.days
+    : null;
+  const effectiveCourtCount = Math.max(1, tournamentSettings.courtCount ?? courtCount);
+  const matchesPerDayPerCourt = Math.max(1, Math.floor(DAILY_WINDOW_MINUTES / MATCH_DURATION_MINUTES));
+  const matchesPerDayTarget = plannedDays ? matchesPerDayPerCourt * effectiveCourtCount : null;
+  const plannedMatchesFromSchedule = plannedDays && matchesPerDayTarget
+    ? matchesPerDayTarget * plannedDays
+    : null;
+
   const targetRounds = optimalPlan.optimalRounds > 0 ? optimalPlan.optimalRounds : matchSummary.totalRounds;
-  const plannedMatchesRaw = optimalPlan.optimalRounds > 0
+  const fallbackMatchesRaw = optimalPlan.optimalRounds > 0
     ? Math.max(matchSummary.scheduled, Math.round(optimalPlan.matchesPerRound * optimalPlan.optimalRounds))
     : matchSummary.scheduled;
-  const plannedMatches = Number.isFinite(plannedMatchesRaw) && plannedMatchesRaw > 0 ? plannedMatchesRaw : matchSummary.scheduled;
-  const matchesRemaining = Math.max(plannedMatches - matchSummary.played, 0);
-  const progressPercent = plannedMatches > 0
-    ? Math.min(100, Math.round((matchSummary.played / plannedMatches) * 100))
+  const fallbackMatches = Number.isFinite(fallbackMatchesRaw) && fallbackMatchesRaw > 0
+    ? fallbackMatchesRaw
+    : matchSummary.scheduled;
+
+  const plannedMatchesTarget = plannedMatchesFromSchedule ?? fallbackMatches;
+  const matchesRemaining = Math.max(plannedMatchesTarget - matchSummary.played, 0);
+  const progressPercent = plannedMatchesTarget > 0
+    ? Math.min(100, Math.round((matchSummary.played / plannedMatchesTarget) * 100))
     : 0;
   const targetRoundsLabel = targetRounds > 0 ? targetRounds : "–";
 
@@ -941,6 +1008,40 @@ function TournamentApp({
     }));
   };
 
+  const handleRoundDateEdit = (roundNumber: number) => {
+    if (!isAdmin) return;
+    const round = rounds.find((r) => r.number === roundNumber);
+    if (!round) return;
+
+    const firstMatchWithDate = round.matches.find((m) => m.savedAt);
+    const defaultInput = formatDateInputValue(round.savedAt || firstMatchWithDate?.savedAt || new Date().toISOString());
+    const input = window.prompt("Tur tamamlanma tarihini girin (örn: 2025-11-09 18:00)", defaultInput);
+    if (input === null) return;
+    if (!input.trim()) {
+      alert("Tarih boş bırakılamaz.");
+      return;
+    }
+
+    const iso = parseDateInput(input);
+    if (!iso) {
+      alert("Geçerli bir tarih girin. Örnek format: 2025-11-09 18:00");
+      return;
+    }
+
+    const updatedRounds = rounds.map((r) => {
+      if (r.number !== roundNumber) return r;
+      const updatedMatches = r.matches.map((match) => {
+        if (match.scoreA != null && match.scoreB != null) {
+          return { ...match, savedAt: iso };
+        }
+        return match;
+      });
+      return { ...r, savedAt: iso, matches: updatedMatches };
+    });
+
+    persistTournamentState({ rounds: updatedRounds });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
       <div className="max-w-6xl mx-auto">
@@ -1042,26 +1143,44 @@ function TournamentApp({
                     </div>
                     <div className="bg-white/10 rounded-lg px-2 py-2">
                       <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
-                        <span>🌀</span>
-                        <span>{matchSummary.submittedRounds}/{targetRoundsLabel}</span>
+                        <span>🗓️</span>
+                        <span>{plannedDays ?? '–'}</span>
                       </div>
-                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Tamamlanan Tur</div>
+                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Planlanan Gün</div>
+                      <div className="text-[10px] text-white/65 mt-0.5">
+                        Tur: {matchSummary.submittedRounds}/{targetRoundsLabel}
+                      </div>
                     </div>
                     <div className="bg-white/10 rounded-lg px-2 py-2">
                       <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
                         <span>✅</span>
-                        <span>{matchSummary.played}</span>
+                        <span>
+                          {plannedMatchesTarget
+                            ? `${matchSummary.played}/${plannedMatchesTarget}`
+                            : matchSummary.played}
+                        </span>
                       </div>
-                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Oynanan Maç</div>
+                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Toplam Maç</div>
+                      <div className="text-[10px] text-white/65 mt-0.5">Kalan: {matchesRemaining}</div>
                     </div>
                     <div className="bg-white/10 rounded-lg px-2 py-2">
                       <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
-                        <span>⏳</span>
-                        <span>{matchesRemaining}</span>
+                        <span>{matchesPerDayTarget ? '🎯' : '⏳'}</span>
+                        <span>
+                          {matchesPerDayTarget
+                            ? `${matchSummary.playedToday}/${matchesPerDayTarget}`
+                            : matchesRemaining}
+                        </span>
                       </div>
-                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Kalan Maç</div>
+                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">
+                        {matchesPerDayTarget ? 'Bugünkü Hedef' : 'Kalan Maç'}
+                      </div>
                       <div className="text-[10px] text-white/60 mt-0.5">
-                        {matchSummary.pending > 0 ? `${matchSummary.pending} skor bekliyor` : 'Tümü işlendi'}
+                        {matchesPerDayTarget
+                          ? `Kalan: ${Math.max(matchesPerDayTarget - matchSummary.playedToday, 0)} maç`
+                          : matchSummary.pending > 0
+                            ? `${matchSummary.pending} skor bekliyor`
+                            : 'Tümü işlendi'}
                       </div>
                     </div>
                   </div>
@@ -1077,7 +1196,7 @@ function TournamentApp({
                       </div>
                     </div>
                   )}
-                  {plannedMatches > 0 && (
+                  {plannedMatchesTarget > 0 && (
                     <div className="mt-3">
                       <div className="flex justify-between text-[10px] sm:text-xs text-white/70">
                         <span>İlerleme</span>
@@ -1086,9 +1205,16 @@ function TournamentApp({
                       <div className="h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden mt-1">
                         <div className="h-full bg-white/90 transition-all" style={{ width: `${progressPercent}%` }}></div>
                       </div>
-                      {optimalPlan.matchesPerRound > 0 && optimalPlan.timePerRound > 0 && (
-                        <div className="text-[10px] sm:text-xs text-white/65 mt-1">
-                          ~{optimalPlan.matchesPerRound} maç/tur • ≈{optimalPlan.timePerRound} dk/tur
+                      <div className="text-[10px] sm:text-xs text-white/65 mt-1">
+                        {matchesPerDayTarget && plannedDays
+                          ? `Toplam ${plannedMatchesTarget} maç • Günlük hedef ${matchesPerDayTarget}`
+                          : optimalPlan.matchesPerRound > 0 && optimalPlan.timePerRound > 0
+                            ? `~${optimalPlan.matchesPerRound} maç/tur • ≈${optimalPlan.timePerRound} dk/tur`
+                            : null}
+                      </div>
+                      {matchSummary.pending > 0 && (
+                        <div className="text-[10px] sm:text-xs text-white/60 mt-0.5">
+                          {matchSummary.pending} maç skor bekliyor
                         </div>
                       )}
                     </div>
@@ -1157,6 +1283,8 @@ function TournamentApp({
                 const lastRound = rounds[rounds.length - 1];
                 const unplayedMatches = lastRound.matches.filter(m => m.scoreA === undefined || m.scoreB === undefined);
                 const playedMatches = lastRound.matches.filter(m => m.scoreA !== undefined && m.scoreB !== undefined);
+                const lastRoundDateLabel = formatDateTime(lastRound.savedAt);
+                const canEditLastRoundDate = isAdmin && lastRound.submitted;
 
                 return (
                   <div className="bg-white rounded-2xl shadow p-6 mb-6">
@@ -1165,11 +1293,24 @@ function TournamentApp({
                         <h3 className="text-xl font-bold text-gray-800">
                           Son Tur <span className="text-base font-medium text-gray-500">(Tur {lastRound.number})</span>
                         </h3>
-                        {lastRound.submitted && (
-                          <div className="mt-1 text-xs font-medium text-white bg-green-500 px-2 py-1 rounded-full inline-block">
-                            ✓ Tur Tamamlandı ({new Date(lastRound.savedAt!).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })})
-                          </div>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
+                          <span className="font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                            📅 {lastRoundDateLabel}
+                          </span>
+                          {canEditLastRoundDate && (
+                            <button
+                              onClick={() => handleRoundDateEdit(lastRound.number)}
+                              className="text-blue-600 hover:text-blue-700 font-semibold"
+                            >
+                              Tarihi Düzenle
+                            </button>
+                          )}
+                          {lastRound.submitted && (
+                            <span className="text-xs font-medium text-white bg-green-500 px-2 py-1 rounded-full">
+                              ✓ Tur Tamamlandı
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {isAdmin && !lastRound.submitted && (
                         <button
@@ -1284,12 +1425,18 @@ function TournamentApp({
               {rounds.slice(0, -1).map((round) => {
                 const unplayedMatches = round.matches.filter(m => m.scoreA === undefined || m.scoreB === undefined);
                 if (unplayedMatches.length === 0) return null;
+                const roundDateLabel = formatDateTime(round.savedAt);
                 
                 return (
                   <div key={round.number} className="bg-white rounded-2xl shadow p-6 mb-6">
-                    <h3 className="text-lg font-semibold text-amber-800 mb-3">
-                      Tur {round.number} - Oynanmamış Maçlar
-                    </h3>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <h3 className="text-lg font-semibold text-amber-800">
+                        Tur {round.number} - Oynanmamış Maçlar
+                      </h3>
+                      <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded-full">
+                        📅 {roundDateLabel}
+                      </span>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {unplayedMatches.map((m) => {
                         const originalMatchIndex = round.matches.findIndex(match => match === m);
@@ -1323,6 +1470,7 @@ function TournamentApp({
                   const matchDates = round.matches.map(m => m.savedAt).filter(Boolean).sort((a, b) => (b || '').localeCompare(a || ''));
                   const latestMatchDate = matchDates[0];
                   const isCollapsed = collapsedRounds[round.number] ?? true;
+                  const roundDateLabel = formatDateTime(round.savedAt ?? latestMatchDate);
 
                   return (
                     <div key={round.number} className="bg-white rounded-2xl shadow-sm border">
@@ -1340,11 +1488,20 @@ function TournamentApp({
                           <span className="text-sm text-gray-500">
                             ({round.matches.length} maç)
                           </span>
-                          {round.submitted && latestMatchDate && (
-                            <span className="hidden sm:inline-block text-xs font-medium text-white bg-green-500 px-2 py-1 rounded-full">
-                              ✓ {new Date(latestMatchDate).toLocaleDateString('tr-TR')}
-                            </span>
-                          )}
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            📅 {roundDateLabel}
+                            {isAdmin && round.submitted && (
+                              <span
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleRoundDateEdit(round.number);
+                                }}
+                                className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                              >
+                                Düzenle
+                              </span>
+                            )}
+                          </span>
                         </div>
                         <span className="text-sm font-medium text-blue-600">
                           {isCollapsed ? 'Detayları Gör' : 'Gizle'}
