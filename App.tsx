@@ -427,6 +427,54 @@ function TournamentApp({
     return stats;
   }, [players, rounds]);
 
+  const matchSummary = useMemo(() => {
+    let played = 0;
+    let scheduled = 0;
+    let pending = 0;
+    let submittedRounds = 0;
+
+    rounds.forEach((round) => {
+      scheduled += round.matches.length;
+      if (round.submitted) {
+        submittedRounds += 1;
+      }
+
+      round.matches.forEach((match) => {
+        const hasScoreA = match.scoreA != null;
+        const hasScoreB = match.scoreB != null;
+        if (hasScoreA && hasScoreB) {
+          played += 1;
+        } else {
+          pending += 1;
+        }
+      });
+    });
+
+    return {
+      played,
+      scheduled,
+      pending,
+      submittedRounds,
+      totalRounds: rounds.length,
+    };
+  }, [rounds]);
+
+  const optimalPlan = useMemo(
+    () => calculateOptimalRounds(players.length, courtCount),
+    [players.length, courtCount, tournamentSettings.days, tournamentSettings.estimatedRounds]
+  );
+
+  const targetRounds = optimalPlan.optimalRounds > 0 ? optimalPlan.optimalRounds : matchSummary.totalRounds;
+  const plannedMatchesRaw = optimalPlan.optimalRounds > 0
+    ? Math.max(matchSummary.scheduled, Math.round(optimalPlan.matchesPerRound * optimalPlan.optimalRounds))
+    : matchSummary.scheduled;
+  const plannedMatches = Number.isFinite(plannedMatchesRaw) && plannedMatchesRaw > 0 ? plannedMatchesRaw : matchSummary.scheduled;
+  const matchesRemaining = Math.max(plannedMatches - matchSummary.played, 0);
+  const progressPercent = plannedMatches > 0
+    ? Math.min(100, Math.round((matchSummary.played / plannedMatches) * 100))
+    : 0;
+  const targetRoundsLabel = targetRounds > 0 ? targetRounds : "–";
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
@@ -967,40 +1015,90 @@ function TournamentApp({
             </div>
           </div>
           <div className="mt-6">
-            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 text-white rounded-3xl p-5 sm:p-6 shadow-xl">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 sm:gap-6">
-                <div className="space-y-2 flex-1 min-w-0">
-                  <span className="text-[10px] md:text-xs uppercase tracking-[0.3em] text-white/70">Aktif Turnuva</span>
-                  <div className="space-y-1">
+            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 text-white rounded-2xl p-4 sm:p-6 shadow-lg">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-6">
+                <div className="space-y-3 flex-1 min-w-0">
+                  <span className="inline-flex items-center gap-2 text-[11px] md:text-xs uppercase tracking-[0.22em] text-white/70">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/70" aria-hidden="true"></span>
+                    Aktif Turnuva
+                  </span>
+                  <div className="space-y-2">
                     {tournamentSettings.name && (
-                      <div className="text-xl md:text-3xl font-black leading-tight break-words">
+                      <div className="text-lg sm:text-xl md:text-3xl font-black leading-tight break-words">
                         🏆 {tournamentSettings.name}
                       </div>
                     )}
-                    <div className={`${tournamentSettings.name ? 'text-base md:text-xl' : 'text-xl md:text-4xl'} font-black leading-tight break-words ${tournamentSettings.name ? 'text-white/80' : ''}`}>
+                    <div className={`${tournamentSettings.name ? 'text-sm sm:text-base md:text-xl' : 'text-lg sm:text-xl md:text-4xl'} font-black leading-tight break-words ${tournamentSettings.name ? 'text-white/85' : ''}`}>
                       {tournamentId || "Turnuva ID'si seçilmedi"}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 text-xs md:text-sm text-white/80">
-                    <div className="flex items-center gap-1">
-                      <span>👥</span>
-                      <span>{players.length} oyuncu</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 text-white">
+                    <div className="bg-white/10 rounded-lg px-2 py-2">
+                      <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
+                        <span>👥</span>
+                        <span>{players.length}</span>
+                      </div>
+                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Katılımcı</div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <span>🌀</span>
-                      <span>{rounds.length} tur</span>
+                    <div className="bg-white/10 rounded-lg px-2 py-2">
+                      <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
+                        <span>🌀</span>
+                        <span>{matchSummary.submittedRounds}/{targetRoundsLabel}</span>
+                      </div>
+                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Tamamlanan Tur</div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <span>⏸️</span>
-                      <span>{totalByeAssignments} bay</span>
+                    <div className="bg-white/10 rounded-lg px-2 py-2">
+                      <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
+                        <span>✅</span>
+                        <span>{matchSummary.played}</span>
+                      </div>
+                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Oynanan Maç</div>
+                    </div>
+                    <div className="bg-white/10 rounded-lg px-2 py-2">
+                      <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
+                        <span>⏳</span>
+                        <span>{matchesRemaining}</span>
+                      </div>
+                      <div className="text-[10px] sm:text-xs text-white/70 uppercase tracking-wide mt-0.5">Kalan Maç</div>
+                      <div className="text-[10px] text-white/60 mt-0.5">
+                        {matchSummary.pending > 0 ? `${matchSummary.pending} skor bekliyor` : 'Tümü işlendi'}
+                      </div>
                     </div>
                   </div>
+                  {(tournamentSettings.courtCount ?? courtCount) && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-white/70">
+                      <div className="bg-white/5 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                        <span>⏸️</span>
+                        <span className="font-medium text-white/85">{totalByeAssignments} bay</span>
+                      </div>
+                      <div className="bg-white/5 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                        <span>🏟️</span>
+                        <span className="font-medium text-white/85">{tournamentSettings.courtCount ?? courtCount} saha</span>
+                      </div>
+                    </div>
+                  )}
+                  {plannedMatches > 0 && (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-[10px] sm:text-xs text-white/70">
+                        <span>İlerleme</span>
+                        <span>%{progressPercent}</span>
+                      </div>
+                      <div className="h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden mt-1">
+                        <div className="h-full bg-white/90 transition-all" style={{ width: `${progressPercent}%` }}></div>
+                      </div>
+                      {optimalPlan.matchesPerRound > 0 && optimalPlan.timePerRound > 0 && (
+                        <div className="text-[10px] sm:text-xs text-white/65 mt-1">
+                          ~{optimalPlan.matchesPerRound} maç/tur • ≈{optimalPlan.timePerRound} dk/tur
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   {isAdmin && (
                     <button
                       onClick={() => setShowSettingsModal(true)}
-                      className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs md:text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60"
+                      className="flex justify-center items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs md:text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 w-full sm:w-auto"
                       title="Turnuva ayarlarını düzenle"
                     >
                       ⚙️ <span>Ayarlar</span>
@@ -1008,17 +1106,17 @@ function TournamentApp({
                   )}
                   <button
                     onClick={handleCopyTournamentId}
-                    className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs md:text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent"
+                    className="flex justify-center items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs md:text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent w-full sm:w-auto"
                   >
                     📋 <span>ID</span>
                   </button>
                   {copyStatus === "copied" && (
-                    <span className="text-[10px] font-semibold rounded-full bg-emerald-400/25 text-white px-2 py-1">
+                    <span className="text-[10px] font-semibold rounded-full bg-emerald-400/25 text-white px-2 py-1 text-center">
                       Kopyalandı
                     </span>
                   )}
                   {copyStatus === "error" && (
-                    <span className="text-[10px] font-semibold rounded-full bg-red-400/30 text-white px-2 py-1">
+                    <span className="text-[10px] font-semibold rounded-full bg-red-400/30 text-white px-2 py-1 text-center">
                       Kopyalanamadı
                     </span>
                   )}
@@ -1486,114 +1584,6 @@ function TournamentApp({
             </div>
             </div>
           )}
-
-          {/* Tur Hesaplama Bilgi Paneli */}
-          {(() => {
-            const calc = calculateOptimalRounds(players.length, courtCount);
-            const currentRounds = rounds.length;
-            
-            // Gün bazlı planlama bilgileri
-            const plannedDays = tournamentSettings.days || null;
-            const estimatedRounds = tournamentSettings.estimatedRounds || null;
-            const roundsPerDay = 3; // 90 dakika / 30 dakika = 3 tur/gün
-            const currentDay = plannedDays ? Math.ceil(currentRounds / roundsPerDay) : null;
-            const roundsToday = plannedDays ? (currentRounds % roundsPerDay || roundsPerDay) : null;
-            
-            return (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4">
-                <h3 className="text-lg font-semibold text-blue-800 mb-2">
-                  🏆 Turnuva Planlama
-                </h3>
-                
-                {/* Gün Bazlı İlerleme Kartı */}
-                {plannedDays && estimatedRounds && currentDay && roundsToday !== null ? (
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-5">
-                    {/* Ana Başlık */}
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h4 className="text-xl font-bold text-blue-900">
-                          📅 Gün {currentDay}/{plannedDays}
-                        </h4>
-                        <p className="text-sm text-blue-700 mt-1">
-                          Tur {currentRounds}/{estimatedRounds} (%{Math.round((currentRounds / estimatedRounds) * 100)})
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-3xl font-bold text-blue-600">
-                          {roundsToday}/{roundsPerDay}
-                        </div>
-                        <div className="text-xs text-blue-600">
-                          Bugün tamamlanan
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Ana İlerleme Çubuğu */}
-                    <div className="mb-3">
-                      <div className="flex justify-between text-xs text-blue-700 mb-1">
-                        <span>Genel İlerleme</span>
-                        <span className="font-semibold">%{Math.round((currentRounds / estimatedRounds) * 100)}</span>
-                      </div>
-                      <div className="w-full bg-blue-200 rounded-full h-4 overflow-hidden">
-                        <div 
-                          className="bg-gradient-to-r from-blue-500 to-indigo-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
-                          style={{width: `${Math.min(100, (currentRounds / estimatedRounds) * 100)}%`}}
-                        >
-                          {currentRounds > 0 && (
-                            <span className="text-xs text-white font-semibold">
-                              {currentRounds}/{estimatedRounds}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Günlük İlerleme */}
-                    <div className="bg-white/70 rounded-lg p-3 mb-3">
-                      <div className="flex justify-between text-xs text-blue-700 mb-1">
-                        <span>📍 Bugünün İlerlemesi</span>
-                        <span className="font-semibold">%{Math.round((roundsToday / roundsPerDay) * 100)}</span>
-                      </div>
-                      <div className="w-full bg-blue-100 rounded-full h-2.5 overflow-hidden">
-                        <div 
-                          className="bg-gradient-to-r from-green-400 to-green-600 h-2.5 rounded-full transition-all duration-500"
-                          style={{width: `${(roundsToday / roundsPerDay) * 100}%`}}
-                        ></div>
-                      </div>
-                      <p className="text-xs text-blue-600 mt-2">
-                        {roundsToday === roundsPerDay 
-                          ? "✅ Bugünün turu tamamlandı!" 
-                          : `⏳ ${roundsPerDay - roundsToday} tur daha kaldı (90 dk = 3 tur/gün)`}
-                      </p>
-                    </div>
-
-                    {/* Ek Bilgiler */}
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div className="bg-white/70 rounded-lg p-2.5">
-                        <div className="text-blue-600 text-xs">Kalan Gün</div>
-                        <div className="text-blue-900 font-bold text-lg">
-                          {Math.max(0, plannedDays - currentDay)} gün
-                        </div>
-                      </div>
-                      <div className="bg-white/70 rounded-lg p-2.5">
-                        <div className="text-blue-600 text-xs">Kalan Tur</div>
-                        <div className="text-blue-900 font-bold text-lg">
-                          {Math.max(0, estimatedRounds - currentRounds)} tur
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-xs sm:text-sm text-blue-50/90 bg-white/10 border border-white/20 rounded-lg px-3 py-2">
-                    Planlama verisi girilmedi. Turnuva başlatıldığında çalışma hızı bu bölümde özetlenir.
-                  </div>
-                )}
-                <div className="mt-3 text-xs text-blue-50/80">
-                  💡 {calc.matchesPerRound} maç/tur × {courtCount} saha ≈ {calc.timePerRound} dk (maç başına 30dk)
-                </div>
-              </div>
-            );
-          })()}
 
           {isAdmin ? (
             <div className="mt-6 text-center">
