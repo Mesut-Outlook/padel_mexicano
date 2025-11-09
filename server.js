@@ -48,9 +48,9 @@ async function convertDbToTournamentData(tournament) {
     matches: r.matches.map((m) => ({
       teamA: m.teamA,
       teamB: m.teamB,
-      scoreA: m.scoreA,
-      scoreB: m.scoreB,
-      winner: m.winner,
+        scoreA: m.scoreA ?? undefined,
+        scoreB: m.scoreB ?? undefined,
+        winner: m.winner || undefined,
       perPlayerPoints: m.players.reduce((acc, pm) => {
         acc[pm.player.name] = pm.points;
         return acc;
@@ -66,11 +66,53 @@ async function convertDbToTournamentData(tournament) {
     courtCount: tournament.courtCount,
     tournamentStarted: tournament.tournamentStarted,
     currentRound: tournament.currentRound,
-    playerPool
+    playerPool,
+    name: tournament.name || undefined,
+    tournamentId: tournament.tournamentId
   };
 }
 
 // Routes
+
+// List all tournaments (should be declared before :tournamentId route)
+app.get('/api/tournaments/list', async (req, res) => {
+  try {
+    const tournaments = await prisma.tournament.findMany({
+      include: {
+        players: {
+          include: { player: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const normalizedTournaments = Array.isArray(tournaments) ? tournaments : [];
+
+    const tournamentList = normalizedTournaments.map((t) => ({
+      id: t.tournamentId,
+      name: t.name || undefined,
+      createdAt: t.createdAt.toISOString(),
+      updatedAt: t.updatedAt.toISOString(),
+      playerCount: t.players.length,
+      tournamentStarted: t.tournamentStarted,
+      currentRound: t.currentRound,
+      estimatedRounds: t.estimatedRounds ?? undefined,
+      days: t.days ?? undefined,
+      location: t.location ?? undefined,
+      startDate: t.startDate ? t.startDate.toISOString() : undefined,
+      endDate: t.endDate ? t.endDate.toISOString() : undefined,
+      courtCount: t.courtCount
+    }));
+
+    console.log('[api/tournaments/list] returning', tournamentList.length, 'records');
+
+    res.json({ tournaments: tournamentList || [] });
+  } catch (error) {
+    console.error('Error listing tournaments:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/api/tournaments/:tournamentId', async (req, res) => {
   try {
     const { tournamentId } = req.params;
@@ -245,33 +287,6 @@ app.delete('/api/tournaments/:tournamentId', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting tournament:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// List all tournaments
-app.get('/api/tournaments/list', async (req, res) => {
-  try {
-    const tournaments = await prisma.tournament.findMany({
-      include: {
-        players: {
-          include: { player: true }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    const tournamentList = tournaments.map(t => ({
-      id: t.tournamentId,
-      name: t.name || undefined,
-      createdAt: t.createdAt.toISOString(),
-      playerCount: t.players.length,
-      tournamentStarted: t.tournamentStarted
-    }));
-
-    res.json({ tournaments: tournamentList });
-  } catch (error) {
-    console.error('Error listing tournaments:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -181,6 +181,30 @@ function TournamentApp({
     }
   }, [tournamentId]);
 
+  useEffect(() => {
+    if (!tournamentId) return;
+    if (!tournamentData?.name) return;
+
+    setTournamentSettings((prev) => {
+      const next = { ...prev, name: tournamentData.name } as TournamentSettings;
+      return next;
+    });
+
+    try {
+      const storageKey = `tournament-settings-${tournamentId}`;
+      const existingRaw = localStorage.getItem(storageKey);
+      const existing = existingRaw ? JSON.parse(existingRaw) : {};
+      const merged = {
+        ...existing,
+        name: tournamentData.name,
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem(storageKey, JSON.stringify(merged));
+    } catch (syncError) {
+      console.warn('Turnuva adı localStorage\'a kaydedilemedi:', syncError);
+    }
+  }, [tournamentData?.name, tournamentId]);
+
   // Fallback to empty data if no tournamentData but not loading
   const safeData = tournamentData || {
     players: [],
@@ -190,7 +214,8 @@ function TournamentApp({
     courtCount: 2,
     tournamentStarted: false,
     currentRound: 0,
-    playerPool: []
+    playerPool: [],
+    name: undefined
   };
 
   // Firebase'den gelen verileri local state'e senkronize et
@@ -219,6 +244,7 @@ function TournamentApp({
     totals?: Record<string, number>;
     byeCounts?: Record<string, number>;
     courtCount?: number;
+    name?: string;
   };
 
   const persistTournamentState = async (patch: TournamentStatePatch) => {
@@ -228,6 +254,21 @@ function TournamentApp({
     const nextTotals = patch.totals ?? totals;
     const nextByeCounts = patch.byeCounts ?? byeCounts;
     const nextCourtCount = patch.courtCount ?? courtCount;
+    let nextName = patch.name ?? tournamentSettings?.name;
+
+    if (!nextName && tournamentId) {
+      try {
+        const storedSettings = localStorage.getItem(`tournament-settings-${tournamentId}`);
+        if (storedSettings) {
+          const parsed = JSON.parse(storedSettings);
+          if (typeof parsed?.name === 'string' && parsed.name.trim().length > 0) {
+            nextName = parsed.name.trim();
+          }
+        }
+      } catch (nameError) {
+        console.warn('Turnuva adı okunamadı:', nameError);
+      }
+    }
 
     if (patch.players) setPlayers(nextPlayers);
     if (patch.playerPool) setPlayerPool(nextPlayerPool);
@@ -237,6 +278,7 @@ function TournamentApp({
     if (patch.courtCount !== undefined) setCourtCount(nextCourtCount);
 
     updateTournament({
+      name: nextName,
       players: nextPlayers,
       playerPool: nextPlayerPool,
       rounds: nextRounds,
@@ -339,6 +381,50 @@ function TournamentApp({
       playersNeedingRest,
       playersNeedingPlay,
     };
+  }, [players, rounds]);
+
+  const winLossStats = useMemo(() => {
+    const stats: Record<string, { wins: number; losses: number }> = {};
+
+    players.forEach((player) => {
+      stats[player] = { wins: 0, losses: 0 };
+    });
+
+    rounds.forEach((round) => {
+      if (!round.submitted) return;
+
+      round.matches.forEach((match) => {
+        const { winner, teamA, teamB } = match;
+        if (winner !== 'A' && winner !== 'B') {
+          return;
+        }
+
+        teamA.forEach((player) => {
+          if (!stats[player]) stats[player] = { wins: 0, losses: 0 };
+        });
+        teamB.forEach((player) => {
+          if (!stats[player]) stats[player] = { wins: 0, losses: 0 };
+        });
+
+        if (winner === 'A') {
+          teamA.forEach((player) => {
+            stats[player].wins += 1;
+          });
+          teamB.forEach((player) => {
+            stats[player].losses += 1;
+          });
+        } else {
+          teamB.forEach((player) => {
+            stats[player].wins += 1;
+          });
+          teamA.forEach((player) => {
+            stats[player].losses += 1;
+          });
+        }
+      });
+    });
+
+    return stats;
   }, [players, rounds]);
 
   if (loading) {
@@ -811,13 +897,13 @@ function TournamentApp({
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
       <div className="max-w-6xl mx-auto">
         <header className="mb-6">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900">🏸 Mexicano Padel</h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Adil ve dengeli bir turnuva sistemi. İlk tur rastgele, sonraki turlar sıralamaya göre eşleştirme.
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl md:text-4xl font-extrabold text-gray-900">🏸 Mexicano Padel</h1>
+              <p className="text-xs md:text-sm text-gray-600 mt-1 max-w-xl">
+                Adil ve dengeli turnuva: ilk tur rastgele, sonraki turlar sıralamaya göre eşleşir.
               </p>
-              <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-gray-600">
+              <div className="flex flex-wrap items-center gap-3 mt-3 text-xs sm:text-sm text-gray-600">
                 <span className="font-medium text-gray-700">
                   {rounds.length > 0 ? `${rounds.length} tur tamamlandı` : "Turnuva başlamadı"}
                 </span>
@@ -828,20 +914,41 @@ function TournamentApp({
                 </span>
               </div>
             </div>
-            {/* Kullanıcı Bilgileri ve Çıkış */}
-            <div className="flex flex-col items-end gap-2 ml-4">
-              <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
-                <span className="text-2xl">{isAdmin ? "👤" : "🎾"}</span>
-                <div className="text-right">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{isAdmin ? "Admin" : "Oyuncu"}</div>
-                  <div className="text-sm font-bold text-gray-800">{user.name}</div>
+            <div className="flex flex-row sm:flex-col items-stretch sm:items-end gap-2 w-full sm:w-auto">
+              <div className="flex items-center justify-between sm:justify-end gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 w-full sm:w-auto">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{isAdmin ? "👤" : "🎾"}</span>
+                  <div className="text-left sm:text-right text-xs">
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wide">{isAdmin ? "Admin" : "Oyuncu"}</div>
+                    <div className="text-sm font-bold text-gray-800 truncate max-w-[120px] sm:max-w-[150px]">{user.name}</div>
+                  </div>
+                </div>
+                <div className="flex sm:hidden gap-2">
+                  {isAdmin && onBackToDashboard && (
+                    <button
+                      onClick={onBackToDashboard}
+                      className="text-[11px] px-2 py-1 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors font-medium whitespace-nowrap"
+                    >
+                      🏠 Dashboard
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+                        onLogout();
+                      }
+                    }}
+                    className="text-[11px] px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors font-medium whitespace-nowrap"
+                  >
+                    Çıkış
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="hidden sm:flex gap-2">
                 {isAdmin && onBackToDashboard && (
                   <button
                     onClick={onBackToDashboard}
-                    className="text-xs px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors font-medium"
+                    className="text-xs px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors font-medium whitespace-nowrap"
                   >
                     🏠 Dashboard
                   </button>
@@ -852,7 +959,7 @@ function TournamentApp({
                       onLogout();
                     }
                   }}
-                  className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors font-medium"
+                  className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors font-medium whitespace-nowrap"
                 >
                   Çıkış Yap
                 </button>
@@ -860,21 +967,21 @@ function TournamentApp({
             </div>
           </div>
           <div className="mt-6">
-            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 text-white rounded-3xl p-6 shadow-xl">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                <div className="space-y-2">
-                  <span className="text-xs uppercase tracking-[0.35em] text-white/70">Aktif Turnuva</span>
+            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 text-white rounded-3xl p-5 sm:p-6 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 sm:gap-6">
+                <div className="space-y-2 flex-1 min-w-0">
+                  <span className="text-[10px] md:text-xs uppercase tracking-[0.3em] text-white/70">Aktif Turnuva</span>
                   <div className="space-y-1">
                     {tournamentSettings.name && (
-                      <div className="text-2xl md:text-3xl font-black leading-tight break-words">
+                      <div className="text-xl md:text-3xl font-black leading-tight break-words">
                         🏆 {tournamentSettings.name}
                       </div>
                     )}
-                    <div className={`${tournamentSettings.name ? 'text-lg md:text-xl' : 'text-2xl md:text-4xl'} font-black leading-tight break-words ${tournamentSettings.name ? 'text-white/80' : ''}`}>
+                    <div className={`${tournamentSettings.name ? 'text-base md:text-xl' : 'text-xl md:text-4xl'} font-black leading-tight break-words ${tournamentSettings.name ? 'text-white/80' : ''}`}>
                       {tournamentId || "Turnuva ID'si seçilmedi"}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-3 text-sm text-white/80">
+                  <div className="flex flex-wrap gap-2 text-xs md:text-sm text-white/80">
                     <div className="flex items-center gap-1">
                       <span>👥</span>
                       <span>{players.length} oyuncu</span>
@@ -885,34 +992,33 @@ function TournamentApp({
                     </div>
                     <div className="flex items-center gap-1">
                       <span>⏸️</span>
-                      <span>{totalByeAssignments} bay hakkı</span>
+                      <span>{totalByeAssignments} bay</span>
                     </div>
                   </div>
-                  {/* Tarih/yer alanları kaldırıldı */}
                 </div>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                   {isAdmin && (
                     <button
                       onClick={() => setShowSettingsModal(true)}
-                      className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60"
-                      title="Turnuva tarih ve yer bilgilerini düzenle"
+                      className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs md:text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60"
+                      title="Turnuva ayarlarını düzenle"
                     >
                       ⚙️ <span>Ayarlar</span>
                     </button>
                   )}
                   <button
                     onClick={handleCopyTournamentId}
-                    className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent"
+                    className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-3 py-2 text-xs md:text-sm font-semibold transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/60 focus:ring-offset-2 focus:ring-offset-transparent"
                   >
-                    📋 <span>ID'yi Kopyala</span>
+                    📋 <span>ID</span>
                   </button>
                   {copyStatus === "copied" && (
-                    <span className="text-xs font-semibold rounded-full bg-emerald-400/25 text-white px-3 py-1">
-                      Kopyalandı!
+                    <span className="text-[10px] font-semibold rounded-full bg-emerald-400/25 text-white px-2 py-1">
+                      Kopyalandı
                     </span>
                   )}
                   {copyStatus === "error" && (
-                    <span className="text-xs font-semibold rounded-full bg-red-400/30 text-white px-3 py-1">
+                    <span className="text-[10px] font-semibold rounded-full bg-red-400/30 text-white px-2 py-1">
                       Kopyalanamadı
                     </span>
                   )}
@@ -923,18 +1029,25 @@ function TournamentApp({
         </header>
 
         {/* Üstte butonlar */}
-        <div className="flex flex-wrap gap-3 mb-6">
-          <button onClick={() => setActivePage('rules')} className="px-4 py-2 rounded-xl bg-blue-100 text-blue-700 font-semibold hover:bg-blue-200">Kurallar</button>
-          <button onClick={() => setActivePage('standings')} className="px-4 py-2 rounded-xl bg-green-100 text-green-700 font-semibold hover:bg-green-200">Sıralama</button>
-          <button onClick={() => setActivePage('archive')} className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200">Maç Arşivi</button>
+        <div className="flex flex-wrap gap-2 mb-6 text-xs sm:text-sm">
+          <button onClick={() => setActivePage('rules')} className="px-3 py-2 rounded-xl bg-blue-100 text-blue-700 font-semibold hover:bg-blue-200 whitespace-nowrap">Kurallar</button>
+          <button onClick={() => setActivePage('standings')} className="px-3 py-2 rounded-xl bg-green-100 text-green-700 font-semibold hover:bg-green-200 whitespace-nowrap">Sıralama</button>
+          <button onClick={() => setActivePage('archive')} className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 whitespace-nowrap">Maç Arşivi</button>
           {activePage !== 'main' && (
-            <button onClick={() => setActivePage('main')} className="px-4 py-2 rounded-xl bg-orange-100 text-orange-700 font-semibold hover:bg-orange-200">Ana Sayfa</button>
+            <button onClick={() => setActivePage('main')} className="px-3 py-2 rounded-xl bg-orange-100 text-orange-700 font-semibold hover:bg-orange-200 whitespace-nowrap">Ana Sayfa</button>
           )}
         </div>
 
         {activePage === 'rules' && <RulesPage />}
         {activePage === 'standings' && (
-          <StandingsPage ranking={ranking} totals={totals} matchBalance={matchBalance} byeCounts={byeCounts} calculateAverage={calculateAverage} />
+          <StandingsPage
+            ranking={ranking}
+            totals={totals}
+            matchBalance={matchBalance}
+            byeCounts={byeCounts}
+            calculateAverage={calculateAverage}
+            winLossStats={winLossStats}
+          />
         )}
         {activePage === 'archive' && (
           <MatchesArchivePage rounds={rounds} />
@@ -1378,8 +1491,6 @@ function TournamentApp({
           {(() => {
             const calc = calculateOptimalRounds(players.length, courtCount);
             const currentRounds = rounds.length;
-            const progress = Math.min(100, (currentRounds / calc.optimalRounds) * 100);
-            const remaining = Math.max(0, calc.optimalRounds - currentRounds);
             
             // Gün bazlı planlama bilgileri
             const plannedDays = tournamentSettings.days || null;
@@ -1473,42 +1584,12 @@ function TournamentApp({
                     </div>
                   </div>
                 ) : (
-                  /* Planlama Olmadan - Basit Görünüm */
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <div className="font-medium text-blue-700">Önerilen Tur</div>
-                      <div className="text-lg font-bold text-blue-900">
-                        {calc.optimalRounds} Tur
-                      </div>
-                      <div className="text-blue-600">
-                        Oyuncu başına ~{calc.matchesPerPlayer} maç
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-blue-700">Mevcut Durum</div>
-                      <div className="text-lg font-bold text-blue-900">
-                        {currentRounds}/{calc.optimalRounds} Tur
-                      </div>
-                      <div className="text-blue-600">
-                        {remaining > 0 ? `${remaining} tur daha önerilen` : "Hedef tamamlandı!"}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-blue-700">İlerleme</div>
-                      <div className="w-full bg-blue-200 rounded-full h-3 mt-2">
-                        <div 
-                          className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                          style={{width: `${Math.round(progress)}%`}}
-                        ></div>
-                      </div>
-                      <div className="text-blue-800 font-medium mt-1">
-                        %{Math.round(progress)}
-                      </div>
-                    </div>
+                  <div className="text-xs sm:text-sm text-blue-50/90 bg-white/10 border border-white/20 rounded-lg px-3 py-2">
+                    Planlama verisi girilmedi. Turnuva başlatıldığında çalışma hızı bu bölümde özetlenir.
                   </div>
                 )}
-                <div className="mt-3 text-xs text-blue-600">
-                  💡 {calc.matchesPerRound} maç/tur × {courtCount} saha = {calc.timePerRound} dk (maç başına 30dk)
+                <div className="mt-3 text-xs text-blue-50/80">
+                  💡 {calc.matchesPerRound} maç/tur × {courtCount} saha ≈ {calc.timePerRound} dk (maç başına 30dk)
                 </div>
               </div>
             );
@@ -1553,7 +1634,14 @@ function TournamentApp({
         {/* Standings */}
         <section className="bg-white rounded-2xl shadow p-4 mt-6">
           <h2 className="text-xl font-semibold mb-3">Güncel Sıralama</h2>
-          <StandingsPage ranking={ranking} totals={totals} matchBalance={matchBalance} byeCounts={byeCounts} calculateAverage={calculateAverage} />
+          <StandingsPage
+            ranking={ranking}
+            totals={totals}
+            matchBalance={matchBalance}
+            byeCounts={byeCounts}
+            calculateAverage={calculateAverage}
+            winLossStats={winLossStats}
+          />
         </section>
       </div>
 
@@ -1569,7 +1657,7 @@ function TournamentApp({
           if (settings.courtCount !== undefined) {
             setCourtCount(settings.courtCount);
             // Firebase'e de kaydet
-            persistTournamentState({ courtCount: settings.courtCount });
+            persistTournamentState({ courtCount: settings.courtCount, name: settings.name });
           }
           
           // localStorage'a kaydet

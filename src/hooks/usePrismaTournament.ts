@@ -41,10 +41,11 @@ export interface TournamentData {
   tournamentStarted: boolean;
   currentRound: number;
   playerPool: string[];
+  name?: string;
 }
 
 // LocalStorage-only mode - sunucu bağlantısı devre dışı
-const USE_LOCAL_STORAGE_ONLY = true;
+const USE_LOCAL_STORAGE_ONLY = false;
 
 export function usePrismaTournament(tournamentId: string) {
   const [data, setData] = useState<TournamentData | null>(null);
@@ -61,7 +62,8 @@ export function usePrismaTournament(tournamentId: string) {
     courtCount: 2,
     tournamentStarted: false,
     currentRound: 0,
-    playerPool: [...DEFAULT_PLAYER_POOL]
+    playerPool: [...DEFAULT_PLAYER_POOL],
+    name: undefined
   }), []);
 
   const normalizeTournamentData = useCallback((raw: Partial<TournamentData> | null | undefined): TournamentData => {
@@ -82,6 +84,8 @@ export function usePrismaTournament(tournamentId: string) {
       )
     );
 
+    const name = typeof raw?.name === 'string' && raw.name.trim().length > 0 ? raw.name.trim() : undefined;
+
     return {
       players: sanitizedPlayers,
       rounds: Array.isArray(raw?.rounds) ? raw!.rounds : [],
@@ -90,11 +94,59 @@ export function usePrismaTournament(tournamentId: string) {
       courtCount: raw?.courtCount ?? 2,
       tournamentStarted: raw?.tournamentStarted ?? false,
       currentRound: raw?.currentRound ?? 0,
-      playerPool: sanitizedPool
+      playerPool: sanitizedPool,
+      name
     };
   }, []);
 
-  // API fonksiyonu kaldırıldı - sadece localStorage kullanılıyor
+  const fetchTournamentFromApi = useCallback(async (id: string): Promise<TournamentData | null> => {
+    try {
+      const response = await fetch(`/api/tournaments/${id}`);
+      if (!response.ok) {
+        throw new Error(`Fetch failed with status ${response.status}`);
+      }
+
+      const payload = await response.json();
+      if (!payload) return null;
+
+      return normalizeTournamentData(payload);
+    } catch (apiError) {
+      console.warn('Turnuva API isteği başarısız oldu, localStorage verisi kullanılacak:', apiError);
+      return null;
+    }
+  }, [normalizeTournamentData]);
+
+  const saveTournamentToApi = useCallback(async (id: string, payload: TournamentData) => {
+    try {
+      const response = await fetch(`/api/tournaments/${id}` , {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`API kaydetme hatası: ${response.status}`);
+      }
+    } catch (apiError) {
+      console.error('Turnuva API kaydı başarısız oldu:', apiError);
+      // Kullanıcıyı offline bırakmak için hatayı set et ama local state güncellensin
+      setError('Turnuva verisi sunucuya kaydedilemedi. İnternet bağlantınızı kontrol edin.');
+    }
+  }, []);
+
+  const deleteTournamentFromApi = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`/api/tournaments/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error(`API silme hatası: ${response.status}`);
+      }
+    } catch (apiError) {
+      console.error('Turnuva API silme isteği başarısız oldu:', apiError);
+    }
+  }, []);
 
   const loadTournamentData = useCallback(async () => {
     if (!tournamentId) {
@@ -104,6 +156,18 @@ export function usePrismaTournament(tournamentId: string) {
     }
 
     const storageKey = getTournamentStorageKey(tournamentId);
+
+    if (!USE_LOCAL_STORAGE_ONLY) {
+      const apiData = await fetchTournamentFromApi(tournamentId);
+      if (apiData) {
+        setData(apiData);
+        setLoading(false);
+        setError(null);
+        localStorage.setItem(storageKey, JSON.stringify(apiData));
+        return;
+      }
+    }
+
     const savedDataRaw = localStorage.getItem(storageKey);
 
     if (savedDataRaw) {
@@ -141,7 +205,6 @@ export function usePrismaTournament(tournamentId: string) {
   const updateTournament = useCallback(async (newData: TournamentData) => {
     const storageKey = getTournamentStorageKey(tournamentId);
 
-    // Sadece localStorage kullan - API devre dışı
     try {
       localStorage.setItem(storageKey, JSON.stringify(newData));
       setData(newData);
@@ -151,15 +214,22 @@ export function usePrismaTournament(tournamentId: string) {
       setError('Turnuva localStorage\'a kaydedilemedi.');
       setData(newData);
     }
-  }, [getTournamentStorageKey, tournamentId]);
+
+    if (!USE_LOCAL_STORAGE_ONLY) {
+      await saveTournamentToApi(tournamentId, newData);
+    }
+  }, [getTournamentStorageKey, tournamentId, saveTournamentToApi]);
 
   const deleteTournament = useCallback(async () => {
     const storageKey = getTournamentStorageKey(tournamentId);
 
-    // Sadece localStorage'dan sil - API devre dışı
     localStorage.removeItem(storageKey);
     setData(getDefaultTournamentData());
-  }, [getTournamentStorageKey, tournamentId, getDefaultTournamentData]);
+
+    if (!USE_LOCAL_STORAGE_ONLY) {
+      await deleteTournamentFromApi(tournamentId);
+    }
+  }, [getTournamentStorageKey, tournamentId, getDefaultTournamentData, deleteTournamentFromApi]);
 
   const refreshTournament = useCallback(async () => {
     setLoading(true);

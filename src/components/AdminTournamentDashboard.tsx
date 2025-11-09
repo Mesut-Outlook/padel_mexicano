@@ -2,15 +2,18 @@ import { useState, useEffect } from 'react';
 
 interface Tournament {
   id: string;
-  name: string;
-  days: number;
-  estimatedRounds: number;
-  players: number;
-  currentRound: number;
+  name?: string;
   createdAt: string;
+  updatedAt?: string;
+  playerCount: number;
+  currentRound: number;
+  estimatedRounds?: number;
+  days?: number;
   startDate?: string;
   endDate?: string;
   location?: string;
+  courtCount?: number;
+  source: 'remote' | 'local';
 }
 
 interface AdminTournamentDashboardProps {
@@ -34,96 +37,257 @@ export function AdminTournamentDashboard({
     loadTournaments();
   }, []);
 
-  const loadTournaments = async () => {
+  const readLocalTournament = (id: string): Tournament | null => {
     try {
-      // localStorage'dan kayıtlı turnuvaları yükle
-      const savedTournaments = localStorage.getItem('mexicano-tournaments');
-      if (savedTournaments) {
-        const tournamentIds = JSON.parse(savedTournaments) as string[];
-        
-        const tournamentData: Tournament[] = [];
-        for (const id of tournamentIds) {
-          const settingsKey = `tournament-settings-${id}`;
-          const dataKey = `mexicano-${id}`;
-          
-          const settingsData = localStorage.getItem(settingsKey);
-          const tournamentDataStr = localStorage.getItem(dataKey);
-          
-          let settings: any = {};
-          let tournamentInfo: any = {};
-          
-          if (settingsData) {
-            settings = JSON.parse(settingsData);
-          }
-          
-          if (tournamentDataStr) {
-            tournamentInfo = JSON.parse(tournamentDataStr);
-          }
-          
-          tournamentData.push({
-            id,
-            name: settings.name || id,
-            days: settings.days || 0,
-            estimatedRounds: settings.estimatedRounds || 0,
-            players: tournamentInfo.players?.length || 0,
-            currentRound: tournamentInfo.rounds?.filter((r: any) => r.submitted).length || 0,
-            createdAt: settings.createdAt || new Date().toISOString(),
-            startDate: settings.startDate,
-            endDate: settings.endDate,
-            location: settings.location
-          });
+      const settingsRaw = localStorage.getItem(`tournament-settings-${id}`);
+      const stateRaw = localStorage.getItem(`mexicano-tournament-${id}`) || localStorage.getItem(`mexicano-${id}`);
+
+      let settings: Record<string, any> = {};
+      let state: Record<string, any> = {};
+
+      if (settingsRaw) {
+        try {
+          settings = JSON.parse(settingsRaw);
+        } catch (parseError) {
+          console.warn('Turnuva ayarları okunamadı:', parseError);
         }
-        
-        // En yeniden en eskiye sırala
-        tournamentData.sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        
-        setTournaments(tournamentData);
       }
+
+      if (stateRaw) {
+        try {
+          state = JSON.parse(stateRaw);
+        } catch (parseError) {
+          console.warn('Turnuva durumu okunamadı:', parseError);
+        }
+      }
+
+      const name = typeof settings.name === 'string' && settings.name.trim().length > 0
+        ? settings.name.trim()
+        : (typeof state.name === 'string' && state.name.trim().length > 0 ? state.name.trim() : undefined);
+
+      const createdAt = typeof settings.createdAt === 'string'
+        ? settings.createdAt
+        : (typeof state.createdAt === 'string' ? state.createdAt : new Date().toISOString());
+
+      const updatedAt = typeof settings.updatedAt === 'string'
+        ? settings.updatedAt
+        : (typeof state.updatedAt === 'string' ? state.updatedAt : undefined);
+
+      const playerCount = Array.isArray(state.players)
+        ? state.players.filter(Boolean).length
+        : (typeof settings.playerCount === 'number' ? settings.playerCount : 0);
+
+      const currentRound = Array.isArray(state.rounds)
+        ? state.rounds.filter((round: any) => round && round.submitted).length
+        : (typeof state.currentRound === 'number' ? state.currentRound : 0);
+
+      const estimatedRounds = typeof settings.estimatedRounds === 'number'
+        ? settings.estimatedRounds
+        : (typeof state.estimatedRounds === 'number' ? state.estimatedRounds : undefined);
+
+      const days = typeof settings.days === 'number' ? settings.days : undefined;
+      const courtCount = typeof settings.courtCount === 'number'
+        ? settings.courtCount
+        : (typeof state.courtCount === 'number' ? state.courtCount : undefined);
+
+      const startDate = typeof settings.startDate === 'string' ? settings.startDate : undefined;
+      const endDate = typeof settings.endDate === 'string' ? settings.endDate : undefined;
+      const location = typeof settings.location === 'string' ? settings.location : undefined;
+
+      return {
+        id,
+        name,
+        createdAt,
+        updatedAt,
+        playerCount,
+        currentRound,
+        estimatedRounds,
+        days,
+        startDate,
+        endDate,
+        location,
+        courtCount,
+        source: 'local'
+      };
+    } catch (error) {
+      console.warn('Yerel turnuva bilgisi okunamadı:', error);
+      return null;
+    }
+  };
+
+  const loadLocalTournamentSnapshots = (): Tournament[] => {
+    const savedRaw = localStorage.getItem('mexicano-tournaments');
+    if (!savedRaw) return [];
+
+    let savedIds: unknown = [];
+    try {
+      savedIds = JSON.parse(savedRaw);
+    } catch (error) {
+      console.warn('Kayıtlı turnuva listesi çözümlenemedi:', error);
+      return [];
+    }
+
+    if (!Array.isArray(savedIds)) return [];
+
+    const uniqueIds = Array.from(new Set(savedIds)).filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    const locals: Tournament[] = [];
+
+    uniqueIds.forEach((id) => {
+      const snapshot = readLocalTournament(id);
+      if (snapshot) {
+        locals.push(snapshot);
+      }
+    });
+
+    return locals;
+  };
+
+  const fetchRemoteTournaments = async (): Promise<Tournament[]> => {
+    try {
+      const response = await fetch('/api/tournaments/list');
+      if (!response.ok) {
+        throw new Error(`API listesi ${response.status} ile döndü`);
+      }
+
+      const payload = await response.json();
+      const list = Array.isArray(payload?.tournaments) ? payload.tournaments : [];
+
+      return list.map((item: any): Tournament => ({
+        id: item.id,
+        name: typeof item.name === 'string' && item.name.trim().length > 0 ? item.name.trim() : undefined,
+        createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+        updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : undefined,
+        playerCount: typeof item.playerCount === 'number' ? item.playerCount : 0,
+        currentRound: typeof item.currentRound === 'number' ? item.currentRound : 0,
+        estimatedRounds: typeof item.estimatedRounds === 'number' ? item.estimatedRounds : undefined,
+        days: typeof item.days === 'number' ? item.days : undefined,
+        startDate: typeof item.startDate === 'string' ? item.startDate : undefined,
+        endDate: typeof item.endDate === 'string' ? item.endDate : undefined,
+        location: typeof item.location === 'string' ? item.location : undefined,
+        courtCount: typeof item.courtCount === 'number' ? item.courtCount : undefined,
+        source: 'remote'
+      }));
+    } catch (error) {
+      console.warn('Uzak turnuva listesi alınamadı:', error);
+      return [];
+    }
+  };
+
+  const loadTournaments = async () => {
+    setLoading(true);
+    try {
+      const [remoteTournaments, localTournaments] = await Promise.all([
+        fetchRemoteTournaments(),
+        Promise.resolve(loadLocalTournamentSnapshots())
+      ]);
+
+      const merged = new Map<string, Tournament>();
+
+      remoteTournaments.forEach((tournament) => {
+        merged.set(tournament.id, tournament);
+      });
+
+      localTournaments.forEach((localTournament) => {
+        const existing = merged.get(localTournament.id);
+        if (existing) {
+          merged.set(localTournament.id, {
+            ...localTournament,
+            ...existing,
+            name: existing.name || localTournament.name,
+            playerCount: existing.playerCount || localTournament.playerCount,
+            estimatedRounds: existing.estimatedRounds ?? localTournament.estimatedRounds,
+            days: existing.days ?? localTournament.days,
+            startDate: existing.startDate ?? localTournament.startDate,
+            endDate: existing.endDate ?? localTournament.endDate,
+            location: existing.location ?? localTournament.location,
+            courtCount: existing.courtCount ?? localTournament.courtCount,
+            source: existing.source
+          });
+        } else {
+          merged.set(localTournament.id, localTournament);
+        }
+      });
+
+      const combined = Array.from(merged.values()).sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateB - dateA;
+      });
+
+      setTournaments(combined);
     } catch (error) {
       console.error('Turnuvalar yüklenemedi:', error);
+      setTournaments(loadLocalTournamentSnapshots());
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteTournament = (tournamentId: string) => {
-    const tournament = tournaments.find(t => t.id === tournamentId);
+  const deleteTournament = async (tournamentId: string) => {
+    const tournament = tournaments.find((t) => t.id === tournamentId);
     const tournamentName = tournament?.name || tournamentId;
-    
-    if (window.confirm(`"${tournamentName}" turnuvasını silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz!`)) {
+
+    if (!window.confirm(`"${tournamentName}" turnuvasını silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz!`)) {
+      return;
+    }
+
+    setLoading(true);
+    let remoteError: Error | null = null;
+
+    if (tournament?.source !== 'local') {
       try {
-        // Tüm ilgili verileri sil
-        localStorage.removeItem(`mexicano-${tournamentId}`);
-        localStorage.removeItem(`tournament-settings-${tournamentId}`);
-        
-        // Liste'den çıkar
-        const savedTournaments = localStorage.getItem('mexicano-tournaments');
-        if (savedTournaments) {
-          const tournamentIds = JSON.parse(savedTournaments) as string[];
-          const filtered = tournamentIds.filter(id => id !== tournamentId);
-          localStorage.setItem('mexicano-tournaments', JSON.stringify(filtered));
+        const response = await fetch(`/api/tournaments/${tournamentId}`, { method: 'DELETE' });
+        if (!response.ok) {
+          throw new Error(`API silme hatası: ${response.status}`);
         }
-        
-        // State'i güncelle
-        setTournaments(prev => prev.filter(t => t.id !== tournamentId));
-        
-        alert('✅ Turnuva başarıyla silindi!');
       } catch (error) {
-        console.error('Turnuva silinemedi:', error);
-        alert('❌ Turnuva silinirken bir hata oluştu!');
+        console.error('Turnuva sunucudan silinemedi:', error);
+        remoteError = error as Error;
       }
+    }
+
+    try {
+      localStorage.removeItem(`mexicano-tournament-${tournamentId}`);
+      localStorage.removeItem(`mexicano-${tournamentId}`);
+      localStorage.removeItem(`tournament-settings-${tournamentId}`);
+
+      const savedRaw = localStorage.getItem('mexicano-tournaments');
+      if (savedRaw) {
+        try {
+          const ids = JSON.parse(savedRaw);
+          if (Array.isArray(ids)) {
+            const filtered = ids.filter((id: string) => id !== tournamentId);
+            localStorage.setItem('mexicano-tournaments', JSON.stringify(filtered));
+          }
+        } catch (error) {
+          console.warn('Kayıtlı turnuva listesi güncellenemedi:', error);
+        }
+      }
+    } catch (storageError) {
+      console.warn('Yerel veriler silinirken hata oluştu:', storageError);
+    }
+
+    await loadTournaments();
+
+    if (remoteError) {
+      alert('⚠️ Turnuva yerelden silindi ancak sunucudan silinirken hata oluştu. İnternet bağlantınızı kontrol edin.');
+    } else {
+      alert('✅ Turnuva başarıyla silindi!');
     }
   };
 
-  const activeTournaments = tournaments.filter(t => 
-    t.estimatedRounds === 0 || t.currentRound < t.estimatedRounds
-  );
-  
-  const completedTournaments = tournaments.filter(t => 
-    t.estimatedRounds > 0 && t.currentRound >= t.estimatedRounds
-  );
+  const activeTournaments = tournaments.filter((t) => {
+    const targetRounds = t.estimatedRounds;
+    if (typeof targetRounds !== 'number' || targetRounds <= 0) {
+      return true;
+    }
+    return t.currentRound < targetRounds;
+  });
+
+  const completedTournaments = tournaments.filter((t) => {
+    const targetRounds = t.estimatedRounds;
+    return typeof targetRounds === 'number' && targetRounds > 0 && t.currentRound >= targetRounds;
+  });
 
   const displayTournaments = selectedTab === 'active' ? activeTournaments : completedTournaments;
 
@@ -228,9 +392,11 @@ export function AdminTournamentDashboard({
               </div>
             ) : (
               <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {displayTournaments.map(tournament => {
-                  const progress = tournament.estimatedRounds > 0
-                    ? Math.round((tournament.currentRound / tournament.estimatedRounds) * 100)
+                {displayTournaments.map((tournament) => {
+                  const displayName = tournament.name || tournament.id;
+                  const targetRounds = typeof tournament.estimatedRounds === 'number' ? tournament.estimatedRounds : 0;
+                  const progress = targetRounds > 0
+                    ? Math.round((Math.min(tournament.currentRound, targetRounds) / targetRounds) * 100)
                     : 0;
 
                   const createdDate = new Date(tournament.createdAt);
@@ -248,32 +414,44 @@ export function AdminTournamentDashboard({
                       {/* Turnuva Başlığı - Responsive */}
                       <div className="flex items-start justify-between mb-2 sm:mb-3">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-sm sm:text-lg text-gray-800 truncate" title={tournament.id}>
-                            🏆 {tournament.id}
+                          <h3 className="font-bold text-sm sm:text-lg text-gray-800 truncate" title={displayName}>
+                            🏆 {displayName}
                           </h3>
+                          <p className="text-[11px] text-gray-400 truncate" title={tournament.id}>
+                            ID: {tournament.id}
+                          </p>
                           <p className="text-xs text-gray-500 mt-0.5 sm:mt-1">
                             📅 {formattedDate}
                           </p>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTournament(tournament.id);
-                          }}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 sm:p-2 rounded-lg transition-colors ml-1 sm:ml-2 flex-shrink-0"
-                          title="Turnuvayı Sil"
-                        >
-                          🗑️
-                        </button>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
+                            tournament.source === 'remote'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {tournament.source === 'remote' ? '🔗 Neon' : '💾 Yerel'}
+                          </span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await deleteTournament(tournament.id);
+                            }}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 sm:p-2 rounded-lg transition-colors ml-1 sm:ml-2 flex-shrink-0"
+                            title="Turnuvayı Sil"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
 
                       {/* İstatistikler - Responsive */}
                       <div className="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4 bg-gray-50 rounded-lg p-2 sm:p-3">
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600">👥 Oyuncular:</span>
-                          <span className="font-semibold text-gray-800">{tournament.players || 0}</span>
+                          <span className="font-semibold text-gray-800">{tournament.playerCount}</span>
                         </div>
-                        {tournament.days > 0 && (
+                        {typeof tournament.days === 'number' && tournament.days > 0 && (
                           <div className="flex justify-between text-xs sm:text-sm">
                             <span className="text-gray-600">📅 Süre:</span>
                             <span className="font-semibold text-gray-800">{tournament.days} gün</span>
@@ -283,7 +461,7 @@ export function AdminTournamentDashboard({
                           <span className="text-gray-600">🏆 Tur:</span>
                           <span className="font-semibold text-gray-800">
                             {tournament.currentRound}
-                            {tournament.estimatedRounds > 0 && `/${tournament.estimatedRounds}`}
+                            {targetRounds > 0 && `/${targetRounds}`}
                           </span>
                         </div>
                         {tournament.location && (
@@ -294,10 +472,16 @@ export function AdminTournamentDashboard({
                             </span>
                           </div>
                         )}
+                        {typeof tournament.courtCount === 'number' && (
+                          <div className="flex justify-between text-xs sm:text-sm">
+                            <span className="text-gray-600">🏟️ Saha:</span>
+                            <span className="font-semibold text-gray-800">{tournament.courtCount}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* İlerleme Çubuğu - Responsive */}
-                      {tournament.estimatedRounds > 0 && (
+                      {targetRounds > 0 && (
                         <div className="mb-3 sm:mb-4">
                           <div className="flex justify-between text-xs text-gray-600 mb-1">
                             <span>İlerleme</span>
